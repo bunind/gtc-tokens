@@ -1,0 +1,42 @@
+{
+  "component": {
+    "button": {
+      "font-size": {
+        "$type": "dimension",
+        "$value": "{global.typography.font-size.16}",
+        "$extensions": { "mode": {
+          "small":  "{global.typography.font-size.14}",
+          "medium": "{global.typography.font-size.16}",
+          "large":  "{global.typography.font-size.18}"
+        } }
+      },
+      "spacing-gap": {
+        "$type": "dimension",
+        "$value": "{global.size-unit.8}",
+        "$extensions": { "mode": {
+          "small":  "{global.size-unit.4}",
+          "medium": "{global.size-unit.8}",
+          "large":  "{global.size-unit.12}"
+        } }
+      },
+      "radius": {
+        "$type": "dimension",
+        "$value": "{global.radius.8}",
+        "$extensions": { "mode": {
+          "small":  "{global.radius.4}",
+          "medium": "{global.radius.8}",
+          "large":  "{global.radius.12}"
+        } }
+      },
+      "size": {
+        "$type": "dimension",
+        "$value": "{global.size-unit.24}",
+        "$extensions": { "mode": {
+          "small":  "{global.size-unit.16}",
+          "medium": "{global.size-unit.24}",
+          "large":  "{global.size-unit.28}"
+        } }
+      }
+    }
+  }
+}

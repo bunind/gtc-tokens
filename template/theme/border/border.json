@@ -1,0 +1,16 @@
+{
+  "theme": {
+    "border": {
+      "default": {
+        "$type": "color",
+        "$value": "{global.color.base.3}",
+        "$extensions": { "mode": { "light": "{global.color.base.3}", "dark": "{global.color.base.7}" } }
+      },
+      "secondary": {
+        "$type": "color",
+        "$value": "{global.color.base.2}",
+        "$extensions": { "mode": { "light": "{global.color.base.2}", "dark": "{global.color.base.8}" } }
+      }
+    }
+  }
+}

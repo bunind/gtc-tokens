@@ -1,0 +1,11 @@
+{
+  "global": {
+    "radius": {
+      "0": { "$type": "dimension", "$value": "0px" },
+      "4":   { "$type": "dimension", "$value": "4px" },
+      "8":   { "$type": "dimension", "$value": "8px" },
+      "12":   { "$type": "dimension", "$value": "12px" },
+      "full": { "$type": "dimension", "$value": "1000px" }
+    }
+  }
+}

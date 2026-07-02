@@ -1,0 +1,21 @@
+{
+  "theme": {
+    "input": {
+      "surface": {
+        "$type": "color",
+        "$value": "{global.color.base.0}",
+        "$extensions": { "mode": { "light": "{global.color.base.0}", "dark": "{global.color.base.9}" } }
+      },
+      "hover": {
+        "$type": "color",
+        "$value": "{global.color.base.1}",
+        "$extensions": { "mode": { "light": "{global.color.base.1}", "dark": "{global.color.base.8}" } }
+      },
+      "border": {
+        "$type": "color",
+        "$value": "{global.color.base.3}",
+        "$extensions": { "mode": { "light": "{global.color.base.3}", "dark": "{global.color.base.7}" } }
+      }
+    }
+  }
+}

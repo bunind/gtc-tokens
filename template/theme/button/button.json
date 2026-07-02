@@ -1,0 +1,25 @@
+{
+  "theme": {
+    "button": {
+      "primary": {
+        "surface": {
+          "$type": "color",
+          "$value": "{global.color.brand.3}",
+          "$extensions": { "mode": { "light": "{global.color.brand.3}", "dark": "{global.color.brand.2}" } }
+        },
+        "text": {
+          "$type": "color",
+          "$value": "{global.color.base.0}",
+          "$extensions": { "mode": { "light": "{global.color.base.0}", "dark": "{global.color.base.10}" } }
+        },
+        "alpha": {
+          "hover": {
+            "$type": "number",
+            "$value": "{global.color.opacity.8}",
+            "$extensions": { "mode": { "light": "{global.color.opacity.8}", "dark": "{global.color.opacity.16}" } }
+          }
+        }
+      }
+    }
+  }
+}

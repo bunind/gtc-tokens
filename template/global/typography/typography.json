@@ -1,0 +1,34 @@
+{
+  "global": {
+    "typography": {
+      "font-size": {
+        "12":  { "$type": "dimension", "$value": "12px" },
+        "14":  { "$type": "dimension", "$value": "14px" },
+        "16":  { "$type": "dimension", "$value": "16px" },
+        "18":  { "$type": "dimension", "$value": "18px" },
+        "20":  { "$type": "dimension", "$value": "20px" },
+        "24": { "$type": "dimension", "$value": "24px" },
+        "30": { "$type": "dimension", "$value": "30px" }
+      },
+      "line-height": {
+        "title":  { "$type": "number", "$value": 1.1 },
+        "text": { "$type": "number", "$value": 1.2 },
+        "label":  { "$type": "number", "$value": 1.75 }
+      },
+      "font-weight": {
+        "regular": { "$type": "fontWeight", "$value": 400 },
+        "medium":  { "$type": "fontWeight", "$value": 500 },
+        "bold":    { "$type": "fontWeight", "$value": 700 }
+      },
+      "letter-spacing": {
+        "title":  { "$type": "dimension", "$value": "-0.2px" },
+        "text": { "$type": "dimension", "$value": "0px" },
+        "label":   { "$type": "dimension", "$value": "0.4px" }
+      },
+      "font-family": {
+        "sans": { "$type": "fontFamily", "$value": "Inter, sans-serif" },
+        "mono": { "$type": "fontFamily", "$value": "JetBrains Mono, monospace" }
+      }
+    }
+  }
+}

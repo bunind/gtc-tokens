@@ -1,0 +1,21 @@
+{
+  "theme": {
+    "icon": {
+      "default": {
+        "$type": "color",
+        "$value": "{global.color.base.9}",
+        "$extensions": { "mode": { "light": "{global.color.base.9}", "dark": "{global.color.base.1}" } }
+      },
+      "secondary": {
+        "$type": "color",
+        "$value": "{global.color.base.6}",
+        "$extensions": { "mode": { "light": "{global.color.base.6}", "dark": "{global.color.base.3}" } }
+      },
+      "muted": {
+        "$type": "color",
+        "$value": "{global.color.base.4}",
+        "$extensions": { "mode": { "light": "{global.color.base.4}", "dark": "{global.color.base.6}" } }
+      }
+    }
+  }
+}

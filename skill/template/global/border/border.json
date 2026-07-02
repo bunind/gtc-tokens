@@ -1,0 +1,15 @@
+{
+  "global": {
+    "border": {
+      "0": { "$type": "dimension", "$value": "0px" },
+      "1": { "$type": "dimension", "$value": "1px" },
+      "2": { "$type": "dimension", "$value": "2px" },
+      "4": { "$type": "dimension", "$value": "4px" },
+      "style": {
+        "solid":  { "$type": "strokeStyle", "$value": "solid" },
+        "dashed": { "$type": "strokeStyle", "$value": "dashed" },
+        "dotted": { "$type": "strokeStyle", "$value": "dotted" }
+      }
+    }
+  }
+}

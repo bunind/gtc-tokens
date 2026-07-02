@@ -1,0 +1,26 @@
+{
+  "theme": {
+    "surface": {
+      "page": {
+        "$type": "color",
+        "$value": "{global.color.base.1}",
+        "$extensions": { "mode": { "light": "{global.color.base.1}", "dark": "{global.color.base.10}" } }
+      },
+      "container": {
+        "$type": "color",
+        "$value": "{global.color.base.0}",
+        "$extensions": { "mode": { "light": "{global.color.base.0}", "dark": "{global.color.base.9}" } }
+      },
+      "overlay": {
+        "$type": "color",
+        "$value": "{global.color.base.0}",
+        "$extensions": { "mode": { "light": "{global.color.base.0}", "dark": "{global.color.base.8}" } }
+      },
+      "modal": {
+        "$type": "color",
+        "$value": "{global.color.base.0}",
+        "$extensions": { "mode": { "light": "{global.color.base.0}", "dark": "{global.color.base.7}" } }
+      }
+    }
+  }
+}
