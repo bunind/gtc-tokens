@@ -43,16 +43,13 @@ Order by context: token root found → `:audit` first, then `:create`; no token 
 
 ## :audit — read-only review
 
-1. Mechanical pass: `python3 <skill-dir>/validate.py <token-root>` — dangling refs, global-aliases-out, raw values in theme/component, cycles.
+1. Mechanical pass: `python3 <skill-dir>/validate.py <token-root>` — dangling refs, global-aliases-out, raw values in theme/component, cycles, color tokens in component, non-factual scale keys, mixed theme/size modes, `$value` not mirroring the default mode. It also *warns* when a mode-carrying token's own path contains one of its mode names — judge each warning (fine if the word names the token's look, a finding if it names the switching context) and report the verdict.
 2. Rule pass — check every token against reference.md rules the validator can't see. Report each under its short rule name (use these exact labels in the output):
    - `name order` — starts with a Group; level order `Group → Element → Classifier → Identifier → State`.
    - `separators` — dots separate levels, hyphens only join words inside one level (`size-unit` ✓, `surface-page` ✗).
    - `classifier use` — only after Group/Element; on variant-specific appearance tokens; absent on structural tokens and single-variant components.
-   - `default mode value` — `$value` mirrors the default mode (`light` / `medium`).
-   - `one mode type per token` — theme tokens carry theme modes, component tokens size modes, never both in one token.
-   - `mode name in path` — a mode as switching context never appears in a token name.
-   - `no color in component` — Component has no color tokens; colors are raw only in Global, aliased in Theme; structural values alias Global, or route through Theme only when they switch on a theme mode.
-   - `factual scale keys` — numeric keys match their value (`size-unit.12` = `12px`); flag mismatches.
+   - `mode name in path` — a mode as switching context never appears in a token name, even when the token doesn't carry that mode itself (the validator only warns about a token's own modes).
+   - `theme routing` — structural values alias Global directly, and route through Theme only when they switch on a theme mode.
    - `role-based names` — design role, never screen/feature (`sidebar-text`, `login-spacing` → flag).
 3. Report findings ranked: breaks resolution → breaks the model → breaks the taxonomy → style. Each finding: token, file, rule, suggested fix. Count issues as `issues`; a rule's scope over mode-carrying tokens is `mode tokens`. **Do not edit** — offer to fix on request.
 

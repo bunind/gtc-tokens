@@ -105,7 +105,7 @@ Modes live under `$extensions.mode`. `$value` carries the default [light / mediu
 
 The default flow: Component aliases Global for structural values; a component's look lives in Theme [`theme.button.*`], never as Component color tokens. The edge case: a structural value that must switch on a theme mode routes through Theme first. Say text should be bolder in light mode and thinner in dark: `component.button.font-weight → theme.button.font-weight`, with modes `light → {global.typography.font-weight.bold}`, `dark → {global.typography.font-weight.regular}`. The group is decided by *what the value varies by* [theme mode → Theme], not by token type.
 
-`validate.py` enforces this: every `{alias}` resolves, no `global.*` token holds an alias, no `theme.*` / `component.*` token stores a raw value, and no reference cycle exists. Run `python3 validate.py`.
+`validate.py` enforces this: every `{alias}` resolves, no `global.*` token holds an alias, no `theme.*` / `component.*` token stores a raw value, and no reference cycle exists. It also enforces the model rules it can see mechanically — no color tokens under `component.*`, factual numeric scale keys [`size-unit.12` = `"12px"`, `opacity.8` = `0.08`; effects keys are elevation roles and exempt], no theme and size modes mixed in one token, and `$value` mirroring the default mode [`light` / `medium`] — and warns when a mode-carrying token's own path contains one of its mode names. Run `python3 validate.py`.
 
 ## Working the tokens
 

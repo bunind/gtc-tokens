@@ -1,0 +1,16 @@
+name: check
+on: [push, pull_request]
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: skill and template copies stay identical
+        run: |
+          diff -r skill/template template --exclude README.md --exclude validate.py
+          diff skill/reference.md template/README.md
+          diff skill/validate.py template/validate.py
+      - name: validate both token sets
+        run: |
+          python3 template/validate.py
+          python3 skill/validate.py skill/template
