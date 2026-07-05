@@ -25,9 +25,9 @@ Then in any Claude Code session, run `/gtc-tokens`. The skill lets you audit a t
 
 - **`template/`**: the starter token set. `global/`, `theme/`, and `component/` hold one JSON file per scale or component, and `validate.py` checks that aliases resolve, global never aliases out, theme and component never store raw values, no cycles exist, plus the GTC model rules it can see mechanically (no color tokens in component, factual scale keys, one mode type per token, `$value` mirrors the default mode). Run `python3 validate.py`.
 
-CI (`.github/workflows/check.yml`) keeps `skill/template/`, `skill/reference.md`, and `skill/validate.py` byte-identical to their `template/` counterparts and validates both token sets on every push.
-
 - **`template/README.md`**: the GTC rulebook, written for AI agents. It covers the model, taxonomy, modes, and scale keys. Read it before adding or editing a token.
+
+- **`.github/workflows/check.yml`**: CI that keeps `skill/template/`, `skill/reference.md`, and `skill/validate.py` byte-identical to their `template/` counterparts and validates both token sets on every push.
 
 ## Skill commands
 
