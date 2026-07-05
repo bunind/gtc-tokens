@@ -1,4 +1,4 @@
-# GTC Tokens
+# GTC design tokens
 
 Skill and template for the **[GTC tokens model](https://buninux.com/design-tokens)**. GTC is a design token framework that helps product teams and AI manage and scale tokens in large-scale UI systems. You can teach AI to operate the model by installing the `/gtc-tokens` skill.
 
