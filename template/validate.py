@@ -5,9 +5,8 @@ truth and never points out), a theme/component token that stores a raw value (th
 alias), a reference cycle (a token must never resolve back to itself, directly or
 through a chain), a color token under component (looks live in theme), a non-factual
 scale key (global.size-unit.12 must be "12px"), theme and size modes mixed in one token,
-or a $value that doesn't mirror the default mode (light / medium). Warns (exit 0) when a
-mode-carrying token's own path contains one of its mode names — legit only if the word
-names the token's look, not a switching context.
+or a $value that doesn't mirror the default mode (light / medium). A mode word appearing
+in a token path is fine — it can be a Classifier/Identifier naming a look or context slot.
 Run: python3 validate.py [token-root] (defaults to the script's folder)"""
 import json, re, sys, pathlib
 
@@ -70,7 +69,6 @@ def main():
                 errors.append(f"raw value in theme/component (forbidden): {name} = {json.dumps(v)}")
 
     # GTC model rules the merged tree can answer mechanically
-    warnings = []
     for name, node in nodes.items():
         modes = node.get("$extensions", {}).get("mode", {})
         key = name.rsplit(".", 1)[-1]
@@ -88,9 +86,6 @@ def main():
             default = modes.get("light", modes.get("medium"))
             if default is not None and node["$value"] != default:
                 errors.append(f"$value does not mirror the default mode: {name} = {json.dumps(node['$value'])} vs {json.dumps(default)}")
-            clash = set(name.split(".")) & modes.keys()
-            if clash:
-                warnings.append(f"mode name in token path: {name} carries mode(s) {sorted(clash)} — fine only if the word names the token's look, not a context")
 
     # cycle check: a token must never resolve back to itself (DFS over resolvable refs)
     WHITE, GREY, BLACK = 0, 1, 2
@@ -109,8 +104,6 @@ def main():
         if state[n] == WHITE:
             visit(n, [n])
 
-    if warnings:
-        print("\n".join("warning: " + w for w in warnings))
     if errors:
         print("\n".join(errors)); sys.exit(1)
     print(f"OK: {len(tokens)} tokens — aliases resolve, alias direction holds, no raw values in theme/component, "

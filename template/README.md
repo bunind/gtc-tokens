@@ -66,7 +66,7 @@ Every file keeps the full name-path [`global.color…`, `theme.button…`] so al
 A mode is a property that tells a token which value to use in a given context. One token holds one value per mode; switch the mode and the element repaints/resizes.
 
 - **Theme modes:** `light`, `dark` [and others when needed, e.g. high-contrast].
-- **Component modes:** size modes — `small`, `medium`, `large` [add `xsmall` / `2xlarge` only when a component needs them]. Mode names are `$extensions.mode` keys only; a mode *as a switching context* never appears in a token name — each maps to a factual global token [e.g. `small → {global.size-unit.16}`]. A word like `dark` can still be an Identifier when it names the token's own look [a dark palette variant], not a context.
+- **Component modes:** size modes — `small`, `medium`, `large` [add `xsmall` / `2xlarge` only when a component needs them]. Mode values live under `$extensions.mode` keys, each mapping to a factual global token [e.g. `small → {global.size-unit.16}`]. A mode word may also appear in a token name — `dark` in `theme.surface.dark.page` is an ordinary Classifier/Identifier for the level it precedes, same as `dark` naming a dark palette variant. Name and mode keys are independent; a mode word in the path is never wrong by itself.
 
 Modes are selected by **scope**: flip one component or the whole page at once. A single token can answer to more than one mode [e.g. a color-scheme mode and a size mode], activated independently.
 
@@ -118,6 +118,8 @@ varies by size, or per-component structure → component/<component>/<component>
 ```
 
 Global holds raw values and aliases nothing. Theme and Component never store raw values — Theme aliases Global for a look; Component aliases Global for structure [Theme only in the mode-dependent edge case above].
+
+**The typography exception:** `font-family` needs no component token — a component binds text straight to `global.typography.font-family.*` [the typeface is app-wide]. Add `component.<x>.font-family` only when a component genuinely diverges; its absence is correct, never a gap.
 
 **Common requests → what to edit.** Always finish with `python3 validate.py`.
 
@@ -181,7 +183,7 @@ theme.input.surface                    single variant  → omitted
 The taxonomy rests on three rules:
 
 1. **Why before where.** A name reflects *why* a token exists before *where* it's used, encoding the full path down to its value.
-2. **A clear order, with no missing group.** Levels keep their order and every name starts with a Group: `Group → Element/Classifier/Identifier/State → value`, or the short `Group → value`. Never lead with a value or drop the Group.
+2. **A clear order, with no missing group.** Levels keep their order and every name starts with a Group: `Group → Element/Classifier/Identifier/State → value`, or the short `Group → value`. Never lead with a value or drop the Group. The Group may be carried by the container instead of the path: in Figma the *collection name* is the Group and variable paths start at Element [`avatar/size` in a `component` collection = `component.avatar.size`] — that satisfies this rule.
 3. **Design role, not screen.** Name tokens and modes by design role, never by screen, feature, or layout — keep the abstraction high. `color` · `button` · `badge` · `dark` ✓ — `card-badge` · `sidebar-text` · `login-spacing` · `dashboard` ✗
 
 ## Token types
@@ -218,7 +220,7 @@ These are *token types*, not folders. Related types share one folder/file under 
 
 ## Scale keys
 
-Each token type's keys are the actual scale. **Numeric keys are factual** — `size-unit.12` is `12px`, `font-size.16` is `16px`, `radius.8` is `8px`. The key *is* the value, so an agent never has to guess. Conventions per type:
+Each token type's keys are the actual scale. **Numeric keys are factual** — `size-unit.12` is `12px`, `font-size.16` is `16px`, `radius.8` is `8px`. The key *is* the value, so an agent never has to guess. The steps listed below are the starter template's defaults, **not a closed set**: a project extends any scale with new factual keys (`size-unit.14`, `font-size.11`, new ramp steps) whenever its design uses the value — membership in these lists is never an audit finding. Conventions per type:
 
 - **color** — neutral ramp `base.0…base.10`, light → dark [`base.0` = `#ffffff`, `base.10` = `#0a0a0a`]. Hue ramps `brand`, `blue`, `red`, `green`, `yellow`, `orange`, `teal`, `purple` each run `1…5`, light → dark [`3` is the mid/base hue].
 - **opacity** — nested under color, so the path is `global.color.opacity.N`, **not** `global.opacity.N`. Keys `0, 8, 16, 24, 32, 48, 64, 80, 100` = percent; value is `0–1`.

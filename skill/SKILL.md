@@ -43,14 +43,19 @@ Order by context: token root found → `:audit` first, then `:create`; no token 
 
 ## :audit — read-only review
 
-1. Mechanical pass: `python3 <skill-dir>/validate.py <token-root>` — dangling refs, global-aliases-out, raw values in theme/component, cycles, color tokens in component, non-factual scale keys, mixed theme/size modes, `$value` not mirroring the default mode. It also *warns* when a mode-carrying token's own path contains one of its mode names — judge each warning (fine if the word names the token's look, a finding if it names the switching context) and report the verdict.
+1. Mechanical pass: `python3 <skill-dir>/validate.py <token-root>` — dangling refs, global-aliases-out, raw values in theme/component, cycles, color tokens in component, non-factual scale keys, mixed theme/size modes, `$value` not mirroring the default mode.
 2. Rule pass — check every token against reference.md rules the validator can't see. Report each under its short rule name (use these exact labels in the output):
-   - `name order` — starts with a Group; level order `Group → Element → Classifier → Identifier → State`.
+   - `name order` — starts with a Group; level order `Group → Element → Classifier → Identifier → State`. In a Figma variable export the collection name carries the Group and variable paths start at Element (`avatar/size` under a `component` collection) — that is compliant, never a missing-Group finding.
    - `separators` — dots separate levels, hyphens only join words inside one level (`size-unit` ✓, `surface-page` ✗).
    - `classifier use` — only after Group/Element; on variant-specific appearance tokens; absent on structural tokens and single-variant components.
-   - `mode name in path` — a mode as switching context never appears in a token name, even when the token doesn't carry that mode itself (the validator only warns about a token's own modes).
    - `theme routing` — structural values alias Global directly, and route through Theme only when they switch on a theme mode.
    - `role-based names` — design role, never screen/feature (`sidebar-text`, `login-spacing` → flag).
+
+   **Not findings — never report:**
+   - A value or key missing from the reference.md starter scales (`size-unit` lacking `14`, `font-size` below `12`, a hex not on a listed ramp step, an opacity between listed stops). Those scales are the *template's* defaults, not a closed set — every project extends them freely, and a project's own scale is the audit baseline. The only scale rule that audits is factual keys (key mirrors value); the validator covers it.
+   - A mode word in a token path (`theme.surface.dark.page`). A mode name is a legitimate Classifier/Identifier for the level it precedes — never flag it, don't second-guess whether it "names a context".
+   - An Identifier naming a look (`base`, `dark`, `green`) rather than a semantic role. Suggesting a semantic rename (`success`, `offline`) is allowed only as an optional note, never as an issue in the count.
+   - A component binding `font-family` straight to `global.typography.font-family.*` with no component token — the accepted exception for typography; absence of `component.<x>.font-family` is correct, not a gap.
 3. Report findings ranked: breaks resolution → breaks the model → breaks the taxonomy → style. Each finding: token, file, rule, suggested fix. Count issues as `issues`; a rule's scope over mode-carrying tokens is `mode tokens`. **Do not edit** — offer to fix on request.
 
 ## :create — add tokens / components
