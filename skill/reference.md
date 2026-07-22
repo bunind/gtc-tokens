@@ -121,6 +121,8 @@ Global holds raw values and aliases nothing. Theme and Component never store raw
 
 **The typography exception:** `font-family` needs no component token — a component binds text straight to `global.typography.font-family.*` [the typeface is app-wide]. Add `component.<x>.font-family` only when a component genuinely diverges; its absence is correct, never a gap.
 
+> **Figma only — variant-switcher variables.** A Figma library may hold STRING variables whose per-mode values are variant names — `badge/item/size`: `XSmall → "XSmall"`, or `list/item/badge-size` pointing a nested badge at a size per mode. They exist to switch a nested instance's variant when a mode flips — a Figma mechanism, not a design token. They stay in Figma, are **excluded from the DTCG export**, and are never audit findings [not a raw-value violation]. Pure-code token sets never contain them.
+
 **Common requests → what to edit.** Always finish with `python3 validate.py`.
 
 - *"Change the brand color / a primitive"* → edit `global/color/color.json` [or the relevant `global/<token-type>`]. Every token that aliases it updates automatically.

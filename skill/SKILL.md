@@ -56,6 +56,7 @@ Order by context: token root found → `:audit` first, then `:create`; no token 
    - A mode word in a token path (`theme.surface.dark.page`). A mode name is a legitimate Classifier/Identifier for the level it precedes — never flag it, don't second-guess whether it "names a context".
    - An Identifier naming a look (`base`, `dark`, `green`) rather than a semantic role. Suggesting a semantic rename (`success`, `offline`) is allowed only as an optional note, never as an issue in the count.
    - A component binding `font-family` straight to `global.typography.font-family.*` with no component token — the accepted exception for typography; absence of `component.<x>.font-family` is correct, not a gap.
+   - A Figma variant-switcher variable — a STRING variable whose per-mode values are variant names driving a nested instance (`badge/item/size`: `XSmall → "XSmall"`). A Figma-only mechanism, excluded from DTCG export — never a raw-value violation. Mention it at most as a Figma-awareness note, outside the issue count.
 3. Report findings ranked: breaks resolution → breaks the model → breaks the taxonomy → style. Each finding: token, file, rule, suggested fix. Count issues as `issues`; a rule's scope over mode-carrying tokens is `mode tokens`. **Do not edit** — offer to fix on request.
 
 ## :create — add tokens / components
