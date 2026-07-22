@@ -13,31 +13,30 @@ Operate design token sets built on the GTC model. The rulebook is `reference.md`
 2. Locate the **token root**: a folder containing `global/` + `theme/` + `component/`, or a single `tokens.json` / `*.tokens.json`. Search the cwd, then ask the user if nothing is found. `:new` skips this — it creates the root.
 3. Route on the command word. Accept it in any form the user types — normalize by lowercasing and stripping a leading `:` or `/gtc-tokens` prefix, then match the bare word `audit` / `create` / `new` / `sync`. All of these route to `:sync`: `/gtc-tokens:sync`, `/gtc-tokens :sync`, `/gtc-tokens sync`, and a bare arg of `sync` or `:sync`. No command word, or an unrecognized one → show the menu.
 
-**Output convention:** every data set shown to the user — audit findings, sync diffs, mapping proposals, created-token lists, bootstrap trees — is rendered as vertical records, never wide multi-column tables (they wrap unreadably in narrow terminals). One record per token/finding, one `label: value` line per field. Separate each record from the next with a short fixed divider `--------` (exactly 8 dashes, never full-width, so it never wraps to a new line). Fence as ` ```yaml ` so the field labels (`token:`, `value:`, `modes:`) get the highlighter's key color, and keep the `{}` braces on alias values so they read as real token references. **Indent the divider by two spaces to match the field lines** — at column 0 a `---`-run reads as a YAML document separator and gets colored; indented, it is a plain scalar and renders in the default terminal text color:
+**Output convention:** every data set shown to the user — audit findings, sync diffs, mapping proposals, created-token lists, bootstrap trees — is rendered as vertical records, never wide multi-column tables (they wrap unreadably in narrow terminals). One record per token/finding, one `label: value` line per field. Separate records with a single blank line — no divider lines. Fence as ` ```yaml ` so the field labels (`token:`, `value:`, `modes:`) get the highlighter's key color, and keep the `{}` braces on alias values so they read as real token references:
 
 ```yaml
   token: theme.card.border
   value: {global.color.base.2}
   modes: light {global.color.base.2} / dark {global.color.base.8}
-  --------
+
   token: component.card.radius
   value: {global.radius.8}
   modes: small {global.radius.4} / medium {global.radius.8} / large {global.radius.12}
-  --------
 ```
 
-Short two-column summaries (check → result) may stay tabular. Prose is for verdicts and questions only.
+Short two-column summaries (check → result) may stay tabular. Prose is for verdicts and questions only. No filler section headers or preamble lines ("Mechanical + rule pass results:", "Findings:", "Audit done.") — lead with the verdict, then the records.
 
 ## Menu (bare `/gtc-tokens`)
 
 Present via AskUserQuestion — one question, "GTC Tokens — what do you want to do? (Other → ask a question about the GTC model/skill)", four options. A free-text "Other" answer is treated as a question about the GTC model or this skill: answer it from reference.md, then re-offer the menu.
 
-| Option (label → routes to) | Description |
-|----------------------------|-------------|
-| `Audit` → `:audit` | Review the token set against the GTC model |
-| `Create` → `:create` | Add tokens or a components |
-| `Sync` → `:sync` | Sync tokens with another .json file |
-| `New from template` → `:new` | Start new GTC project from template |
+| Option              | Routes to | Description                                |
+|---------------------|-----------|--------------------------------------------|
+| `Audit`             | `:audit`  | Review the token set against the GTC model |
+| `Create`            | `:create` | Add tokens or components                   |
+| `Sync`              | `:sync`   | Sync tokens with another .json file        |
+| `New from template` | `:new`    | Start new GTC project from template        |
 
 Order by context: token root found → `:audit` first, then `:create`; no token root → `:new` first (and recommend it). Run the chosen command's procedure.
 
@@ -51,12 +50,14 @@ Order by context: token root found → `:audit` first, then `:create`; no token 
    - `theme routing` — structural values alias Global directly, and route through Theme only when they switch on a theme mode.
    - `role-based names` — design role, never screen/feature (`sidebar-text`, `login-spacing` → flag).
 
-   **Not findings — never report:**
+   **Not rule breakers — never report:**
    - A value or key missing from the reference.md starter scales (`size-unit` lacking `14`, `font-size` below `12`, a hex not on a listed ramp step, an opacity between listed stops). Those scales are the *template's* defaults, not a closed set — every project extends them freely, and a project's own scale is the audit baseline. The only scale rule that audits is factual keys (key mirrors value); the validator covers it.
    - A mode word in a token path (`theme.surface.dark.page`). A mode name is a legitimate Classifier/Identifier for the level it precedes — never flag it, don't second-guess whether it "names a context".
    - An Identifier naming a look (`base`, `dark`, `green`) rather than a semantic role. Suggesting a semantic rename (`success`, `offline`) is allowed only as an optional note, never as an issue in the count.
    - A component binding `font-family` straight to `global.typography.font-family.*` with no component token — the accepted exception for typography; absence of `component.<x>.font-family` is correct, not a gap.
    - A Figma variant-switcher variable — a STRING variable whose per-mode values are variant names driving a nested instance (`badge/item/size`: `XSmall → "XSmall"`). A Figma-only mechanism, excluded from DTCG export — never a raw-value violation. Mention it at most as a Figma-awareness note, outside the issue count.
+   - Semantic/role keys on a text-value scale (`font-size/body`, `font-size/large`). Role keys are a legitimate key scheme for typographic scales — text values are semantic. Never report as non-factual keys, not even as a note.
+   - A component property bound straight to a global primitive when its value is constant across size modes (e.g. `paragraphSpacing → {global.size-unit.12}`). Model-legal — a value travels only as far as it needs — regardless of whether sibling tokens route through a component token. Never suggest adding a component token for it.
 3. Report findings ranked: breaks resolution → breaks the model → breaks the taxonomy → style. Each finding: token, file, rule, suggested fix. Count issues as `issues`; a rule's scope over mode-carrying tokens is `mode tokens`. **Do not edit** — offer to fix on request.
 
 ## :create — add tokens / components
@@ -77,11 +78,10 @@ Order by context: token root found → `:audit` first, then `:create`; no token 
 
 ```yaml
   created: card (6 tokens)
-  --------
+
   token: component.card.radius
   value: {global.radius.8}
   modes: small / medium / large
-  --------
 ```
 
 Use the matching verb per action — `created` / `deleted` / `moved` — and for a move show `from:` and `to:` paths. If the validator fails, show its error instead of the success message.

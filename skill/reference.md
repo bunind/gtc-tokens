@@ -12,7 +12,7 @@ Three groups. A value travels only as far as it needs to.
 - **Theme** — how things *look*. Light/dark decisions. Every token aliases Global.
 - **Component** — how things are *built and sized*. Per-component structural tokens [radius, border, size-unit, font-size] that reference **Global**. Component never ships color tokens — a component's look [surface, text color] lives in Theme [`theme.button.*`].
 
-GTC is a **non-linear** model: `theme` and `component` branch out from `global` in parallel, each connecting to its own members along a specificity axis [general → specific]. They are siblings, not a chain — neither sits "under" the other.
+GTC is a **non-linear** token model: `theme` and `component` branch out from `global` in parallel, each connecting to its own members along a specificity axis [general → specific]. They are siblings, not a chain — neither sits "under" the other.
 
 ```
 global.                  [primitives · the source of truth, no aliases]
@@ -135,18 +135,18 @@ Global holds raw values and aliases nothing. Theme and Component never store raw
 
 ## Value type formats
 
-| `$type`       | format                     | example                                     |
-|---------------|----------------------------|---------------------------------------------|
-| `color`       | hex string, 8-digit = alpha | `"#6366f1"`, `"#0000001a"`                 |
-| `dimension`   | px string                  | `"16px"`                                    |
-| `number`      | unitless number            | `1.5` [line-height, opacity 0–1, z-index]   |
-| `fontWeight`  | number                     | `500`                                       |
-| `fontFamily`  | string                     | `"Inter, sans-serif"`                       |
-| `strokeStyle` | keyword string             | `"solid"` / `"dashed"` / `"dotted"`         |
-| `duration`    | ms string                  | `"200ms"`                                   |
-| `cubicBezier` | `[x1, y1, x2, y2]`         | `[0.42, 0, 0.58, 1]`                        |
-| `shadow`      | object                     | `{ color, offsetX, offsetY, blur, spread }` |
-| alias         | `{name-path}` of any token | `"{global.color.base.5}"`                   |
+| `$type`       | format                      | example                                     |
+|---------------|-----------------------------|---------------------------------------------|
+| `color`       | hex string, 8-digit = alpha | `"#6366f1"`, `"#0000001a"`                  |
+| `dimension`   | px string                   | `"16px"`                                    |
+| `number`      | unitless number             | `1.5` [line-height, opacity 0–1, z-index]   |
+| `fontWeight`  | number                      | `500`                                       |
+| `fontFamily`  | string                      | `"Inter, sans-serif"`                       |
+| `strokeStyle` | keyword string              | `"solid"` / `"dashed"` / `"dotted"`         |
+| `duration`    | ms string                   | `"200ms"`                                   |
+| `cubicBezier` | `[x1, y1, x2, y2]`          | `[0.42, 0, 0.58, 1]`                        |
+| `shadow`      | object                      | `{ color, offsetX, offsetY, blur, spread }` |
+| alias         | `{name-path}` of any token  | `"{global.color.base.5}"`                   |
 
 ## Tokens naming taxonomy
 
