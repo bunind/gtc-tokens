@@ -27,7 +27,7 @@ ln -s "$PWD/gtc-tokens/skill" ~/.claude/skills/gtc-tokens
 
 ## Importing from code
 
-`:import` extracts a GTC token set out of an existing **Tailwind v4** repo (shadcn included). It reads the component sources for their class inventory, compiles Tailwind against exactly those classes, routes the result into `global/`, `theme/` and `component/`, and emits a DTCG tree plus a loss report naming everything that did not come through — unreachable classes, off-scale values, raw literals, near-duplicate primitives. Then it hands the tree to `:sync`, which owns the diff and the write.
+`:import` extracts a GTC token set out of an existing **Tailwind v4** repo (shadcn included). It reads the component sources for their class inventory, compiles Tailwind against those classes, routes results into `global/`, `theme/` and `component/`, and emits a DTCG tree plus a report naming issues, unreachable classes, off-scale values, raw literals, or near-duplicates. `:import` hands the tree to `:sync`, which owns the diff and the write.
 
 Tailwind v3 is not supported: a repo without `@theme` is told to upgrade first. The extractor installs nothing — `typescript`, `postcss` and `@tailwindcss/node` are resolved out of the repo being imported. One exception: the class scan needs TypeScript's classic compiler API, which the TypeScript 7 native port dropped, so a TS 7 repo is imported with `--ts <dir holding typescript@6>` and keeps its own dependencies untouched.
 
