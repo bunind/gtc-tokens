@@ -14,3 +14,17 @@ jobs:
         run: |
           python3 template/validate.py
           python3 skill/validate.py skill/template
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: import extractor check
+        run: |
+          # import.mjs has no deps of its own: typescript / postcss / @tailwindcss/node
+          # resolve out of the target repo. The check needs a repo that supplies them, so
+          # one is built here and thrown away. Nothing is installed into this tree.
+          mkdir -p /tmp/deps && cd /tmp/deps
+          echo '{"name":"gtc-ci-deps","private":true}' > package.json
+          # typescript pinned to 6: the class scan uses the classic compiler API, which the
+          # TypeScript 7 native port dropped (see the --ts note in import.mjs).
+          npm i --no-save --silent typescript@6 postcss tailwindcss@4 @tailwindcss/node
+          node "$GITHUB_WORKSPACE/skill/import/check.mjs" /tmp/deps

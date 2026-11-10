@@ -1,6 +1,6 @@
 ---
 name: gtc-tokens
-description: Audit, create, sync, or bootstrap GTC (Global/Theme/Component) design tokens. Use when the user types /gtc-tokens (with :audit, :create, :new, or :sync), asks to review design tokens, mentions the GTC model or token taxonomy, or wants a new token set from the GTC starter template.
+description: Audit, create, sync, import, or bootstrap GTC (Global/Theme/Component) design tokens. Use when the user types /gtc-tokens (with :audit, :create, :new, :sync, or :import), asks to review design tokens, mentions the GTC model or token taxonomy, wants a new token set from the GTC starter template, or wants tokens extracted from an existing Tailwind/shadcn codebase.
 ---
 
 # GTC Tokens
@@ -11,7 +11,7 @@ Operate design token sets built on the GTC model. The rulebook is `reference.md`
 
 1. Read `reference.md`.
 2. Locate the **token root**: a folder containing `global/` + `theme/` + `component/`, or a single `tokens.json` / `*.tokens.json`. Search the cwd, then ask the user if nothing is found. `:new` skips this — it creates the root.
-3. Route on the command word. Accept it in any form the user types — normalize by lowercasing and stripping a leading `:` or `/gtc-tokens` prefix, then match the bare word `audit` / `create` / `new` / `sync`. All of these route to `:sync`: `/gtc-tokens:sync`, `/gtc-tokens :sync`, `/gtc-tokens sync`, and a bare arg of `sync` or `:sync`. No command word, or an unrecognized one → show the menu.
+3. Route on the command word. Accept it in any form the user types — normalize by lowercasing and stripping a leading `:` or `/gtc-tokens` prefix, then match the bare word `audit` / `create` / `new` / `sync` / `import`. All of these route to `:sync`: `/gtc-tokens:sync`, `/gtc-tokens :sync`, `/gtc-tokens sync`, and a bare arg of `sync` or `:sync`. No command word, or an unrecognized one → show the menu.
 
 **Output convention:** every data set shown to the user — audit findings, sync diffs, mapping proposals, created-token lists, bootstrap trees — is rendered as vertical records, never wide multi-column tables (they wrap unreadably in narrow terminals). One record per token/finding, one `label: value` line per field. Separate records with a single blank line — no divider lines. Fence as ` ```yaml ` so the field labels (`token:`, `value:`, `modes:`) get the highlighter's key color, and keep the `{}` braces on alias values so they read as real token references:
 
@@ -31,14 +31,15 @@ Short two-column summaries (check → result) may stay tabular. Prose is for ver
 
 Present via AskUserQuestion — one question, "GTC Tokens — what do you want to do? (Other → ask a question about the GTC model/skill)", four options. A free-text "Other" answer is treated as a question about the GTC model or this skill: answer it from reference.md, then re-offer the menu.
 
-| Option              | Routes to | Description                                |
-|---------------------|-----------|--------------------------------------------|
-| `Audit`             | `:audit`  | Review the token set against the GTC model |
-| `Create`            | `:create` | Add tokens or components                   |
-| `Sync`              | `:sync`   | Sync tokens with another .json file        |
-| `New from template` | `:new`    | Start new GTC project from template        |
+| Option              | Routes to | Description                                 |
+|---------------------|-----------|---------------------------------------------|
+| `Audit`             | `:audit`  | Review the token set against the GTC model  |
+| `Create`            | `:create` | Add tokens or components                    |
+| `Sync`              | `:sync`   | Sync tokens with another .json file         |
+| `New from template` | `:new`    | Start new GTC project from template         |
+| `Import from code`  | `:import` | Extract tokens from a Tailwind v4 codebase  |
 
-Order by context: token root found → `:audit` first, then `:create`; no token root → `:new` first (and recommend it). Run the chosen command's procedure.
+Five commands, four option slots: order by context and drop the least relevant — token root found → `:audit` first, drop `:new`; no token root → `:new` first, drop `:audit`. A free-text "Other" answer naming a dropped command routes to it. Run the chosen command's procedure.
 
 ## :audit — read-only review
 
@@ -92,6 +93,30 @@ Use the matching verb per action — `created` / `deleted` / `moved` — and for
 2. If it already contains `global/`, `theme/`, or `component/` — stop and report. Never overwrite an existing token set.
 3. Copy `<skill-dir>/template/` contents into it, plus `<skill-dir>/validate.py` and `<skill-dir>/reference.md` (rename to `README.md`).
 4. Run `python3 validate.py` in the new root; report the token count and tree.
+
+## :import — extract tokens from a Tailwind v4 codebase
+
+Extractor only: emits a DTCG tree + loss report, then hands off to `:sync` as source A. Tailwind v4 only — a v3 repo (`@tailwind base`, no `@theme`) gets "upgrade to v4 first" and stops. The script resolves `typescript` / `postcss` / `@tailwindcss/node` out of the target repo; no install step.
+
+**TypeScript 7 repos need `--ts`.** The class scan uses the classic compiler API, which the TS 7 native port dropped. The script detects this and prints the fix; pass it on, never work around it: install `typescript@6` in a throwaway directory and run with `--ts <that dir>`, leaving the target repo's own dependencies untouched.
+
+**Input (obligatory, two steps — never skip, never assume from cwd):**
+
+- Step 1 — "Enter the path to the repo to import from." Tip: `Tip: repo root, e.g. ~/Projects/my-app`. Verify it exists and holds a Tailwind v4 setup (a CSS file with `@import "tailwindcss"`).
+- Step 2 — "Enter the path to the token root to sync into (B), or `new` to bootstrap one." `new` routes to `:new` first, then continues.
+
+1. Run `node <skill-dir>/import/import.mjs --repo <repo> --out <tmp-dir>`. If the repo has docs/examples chrome alongside its component library, offer `--only <subdir>` (e.g. `--only components/ui`) to scope extraction. The script detects the CSS entry (or pass `--css`), detects shadcn by `--background`/`--primary` cssVars, and does both legs: AST class inventory with component/variant/size attribution, Tailwind compile of exactly that inventory, join, GTC routing, DTCG emit.
+2. Run `python3 <skill-dir>/validate.py <tmp-dir>` — must exit 0 before anything is shown as a token set.
+3. **Role proposal** (non-shadcn repos only — shadcn cssVars are already roles and are bridge-inverted). The report's `unnamedRole` records are proposals from usage: confirm each via `AskUserQuestion`, never guess. Rename confirmed tokens in the emitted tree before sync.
+4. Present the loss report from `<tmp-dir>/_import-report.json` — counts first, then records as yaml. Six categories, ranked: `unreachable` (class arrives via variable/prop — static analysis cannot see it), `off-scale` (new factual primitive minted), `raw literal` (arbitrary values like `bg-[#2563eb]`), `near-duplicate` (two primitives within ~2% — the drift finding), `unnamed role`, `unmappable`. Every record carries `file:line` or the source var. Also surface `conflicts` (same token, two values — kept/dropped) and `compoundVariants` (reported, never modeled). State what did not come through and why — a confident wrong token set is worse than a short one.
+5. Hand off to `:sync` with A = the emitted tree, B = the token root from step 2. `:sync` owns the diff, confirmation, write, and final validator run.
+
+Fixture check (run after any change to `import/import.mjs`): `node <skill-dir>/import/check.mjs <dir whose node_modules holds typescript@6 + postcss + tailwindcss@4 + @tailwindcss/node>` — asserts button size modes, theme light/dark, `$value` mirroring, no component colors, focus ring capture, validator exit 0. No such repo at hand:
+
+```
+mkdir -p /tmp/gtc-deps && cd /tmp/gtc-deps && echo '{"name":"d","private":true}' > package.json
+npm i typescript@6 postcss tailwindcss@4 @tailwindcss/node
+```
 
 ## :sync — reconcile two token sources
 
