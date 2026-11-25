@@ -37,6 +37,8 @@ Tailwind v3 is not supported: a repo without `@theme` is told to upgrade first. 
 
 - **`skill/import/`**: the `:import` extractor — `import.mjs` (no dependencies of its own) and `check.mjs`, which runs it against a shadcn button fixture and asserts the routing still holds.
 
+- **`skill/gtc.py`**: the token tool for AI agents. `:new` places it next to `validate.py`. `gtc.py init` writes `TOKENS.md` and points `CLAUDE.md` and `AGENTS.md` to it, so agents read one file instead of every JSON file. The map lists which token each CSS selector uses, then every token on one line. `gtc.py set <path>[@mode] <value>` changes tokens in one call: it validates the edit, undoes it on failure and runs the build. `skill/check_gtc.py` is its self-check.
+
 - **`template/`**: the starter token set: `global/`, `theme/`, and `component/`, one JSON file per scale or component. Run `python3 validate.py` to check it against the GTC model.
 
 - **`README.md`**: the GTC rulebook, written for AI agents. It covers the model, taxonomy, modes, and scale keys. AI reads it before adding or editing a token.

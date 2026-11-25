@@ -106,6 +106,9 @@ def main():
 
     if errors:
         print("\n".join(errors)); sys.exit(1)
+    # project copy (next to gtc.py and an existing TOKENS.md): refresh the agent map so a hand edit + build never leaves it stale
+    if HERE.resolve() == pathlib.Path(__file__).resolve().parent and (HERE / "gtc.py").exists() and (HERE / "TOKENS.md").exists():
+        sys.path.insert(0, str(HERE)); sys.dont_write_bytecode = True; import gtc; gtc.write_map()
     print(f"OK: {len(tokens)} tokens — aliases resolve, alias direction holds, no raw values in theme/component, "
           f"no cycles, no component colors, scale keys factual, one mode type per token, $value mirrors default mode.")
 
