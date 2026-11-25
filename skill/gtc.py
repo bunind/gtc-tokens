@@ -199,7 +199,11 @@ def cmd_set(args):
         if path in idx:
             f, n = idx[path]
         else:
-            t = typ or guess_type(v, idx)
+            parent = path.rsplit(".", 1)[0]
+            sib = next((n for p, (_, n) in idx.items() if p.rsplit(".", 1)[0] == parent), None)
+            t = typ or (sib or {}).get("$type") or guess_type(v, idx)
+            if t == "dimension" and isinstance(v, (int, float)):
+                v = f"{v}px"  # ponytail: assumes px; a rem group would need the sibling's unit
             if not t:
                 fail(f"refused: new token {path}: pass --type (color, dimension, number, fontWeight, ...)")
             group, seg = path.split(".")[:2]

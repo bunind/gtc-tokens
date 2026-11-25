@@ -29,6 +29,9 @@ assert "theme.text.secondary  {global.color.base.6} · dark {global.color.base.4
 
 assert run("set", "component.badge.size", "{global.size-unit.20}", "component.badge.size@small", "{global.size-unit.16}")[0] == 0
 assert (root / "component/badge/badge.json").exists() and "component.badge.size" in (root / "TOKENS.md").read_text()
+assert run("set", "global.size-unit.33", "33")[0] == 0, "bare number in a dimension group must be accepted"
+assert '"33": {"$type": "dimension", "$value": "33px"}' in (root / "global/size-unit/size-unit.json").read_text(), "new token takes its group's $type"
+assert run("rm", "global.size-unit.33")[0] == 0
 assert run("rm", "global.color.brand.3")[0] == 1, "rm of an aliased token must be refused"
 assert run("rm", "component.badge.size")[0] == 0 and not (root / "component/badge/badge.json").exists()
 
