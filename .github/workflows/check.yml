@@ -7,13 +7,16 @@ jobs:
       - uses: actions/checkout@v4
       - name: skill and template copies stay identical
         run: |
-          diff -r skill/template template --exclude README.md --exclude validate.py
+          diff -r skill/template template --exclude README.md --exclude validate.py --exclude gtc.py
           diff skill/reference.md template/README.md
           diff skill/validate.py template/validate.py
+          diff skill/gtc.py template/gtc.py
       - name: validate both token sets
         run: |
           python3 template/validate.py
           python3 skill/validate.py skill/template
+      - name: gtc.py agent tool check
+        run: python3 skill/check_gtc.py
       - uses: actions/setup-node@v4
         with:
           node-version: 20

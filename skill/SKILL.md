@@ -59,7 +59,8 @@ Five commands, four option slots: order by context and drop the least relevant �
    - A Figma variant-switcher variable — a STRING variable whose per-mode values are variant names driving a nested instance (`badge/item/size`: `XSmall → "XSmall"`). A Figma-only mechanism, excluded from DTCG export — never a raw-value violation. Mention it at most as a Figma-awareness note, outside the issue count.
    - Semantic/role keys on a text-value scale (`font-size/body`, `font-size/large`). Role keys are a legitimate key scheme for typographic scales — text values are semantic. Never report as non-factual keys, not even as a note.
    - A component property bound straight to a global primitive when its value is constant across size modes (e.g. `paragraphSpacing → {global.size-unit.12}`). Model-legal — a value travels only as far as it needs — regardless of whether sibling tokens route through a component token. Never suggest adding a component token for it.
-3. Report findings ranked: breaks resolution → breaks the model → breaks the taxonomy → style. Each finding: token, file, rule, suggested fix. Count issues as `issues`; a rule's scope over mode-carrying tokens is `mode tokens`. **Do not edit** — offer to fix on request.
+3. Agent-tooling pass (outside the issue count, as notes): the root has no `TOKENS.md` / `gtc.py` (offer `:new`-style install), or its `validate.py` / `gtc.py` differ from `<skill-dir>/` (`cmp`) — a locally loosened validator is how agents passed checks they should have failed.
+4. Report findings ranked: breaks resolution → breaks the model → breaks the taxonomy → style. Each finding: token, file, rule, suggested fix. Count issues as `issues`; a rule's scope over mode-carrying tokens is `mode tokens`. **Do not edit** — offer to fix on request.
 
 ## :create — add tokens / components
 
@@ -75,7 +76,8 @@ Five commands, four option slots: order by context and drop the least relevant �
 3. Follow the reference.md recipes (Working the tokens): new component = copy the `component/button/` shape, rename the key, repoint structural aliases per size mode, add `theme/<name>/` only if it needs its own look; variant = theme token aliasing a hue ramp; primitive = extend the factual scale (key = value).
 4. Name by the taxonomy: minimum levels; Classifier only if multi-variant; State last.
 5. Never write a raw value in theme/component — if no fitting global primitive exists, add the primitive first and say so.
-6. Finish: run the validator, then show the unified success confirmation — same shape for every `:create` action (created, deleted, moved), no emoji. One line stating the action and count, then a yaml record per affected token:
+6. When the root holds `gtc.py`, write through it: `python3 <root>/gtc.py set <path>[@mode] <value> ...` creates or changes tokens, validates, undoes on failure, refreshes `TOKENS.md` and runs the project build in one call; `gtc.py rm <path>` deletes (refused while anything uses it). No `gtc.py` → edit JSON by hand and offer to install it (copy `<skill-dir>/gtc.py`, run `gtc.py init`).
+7. Finish: run the validator, then show the unified success confirmation — same shape for every `:create` action (created, deleted, moved), no emoji. One line stating the action and count, then a yaml record per affected token:
 
 ```yaml
   created: card (6 tokens)
@@ -91,8 +93,9 @@ Use the matching verb per action — `created` / `deleted` / `moved` — and for
 
 1. Ask the user for the target folder; create it if missing.
 2. If it already contains `global/`, `theme/`, or `component/` — stop and report. Never overwrite an existing token set.
-3. Copy `<skill-dir>/template/` contents into it, plus `<skill-dir>/validate.py` and `<skill-dir>/reference.md` (rename to `README.md`).
-4. Run `python3 validate.py` in the new root; report the token count and tree.
+3. Copy `<skill-dir>/template/` contents into it, plus `<skill-dir>/validate.py` and `<skill-dir>/gtc.py`. Do not copy `reference.md`: agents working in the project read `TOKENS.md` instead, and an 18KB rulebook in the token root is what they opened before.
+4. Run `python3 <root>/gtc.py init`: writes `TOKENS.md` (CSS usage + every token, one line each) and the `<!-- gtc-tokens -->` pointer block into the project's `CLAUDE.md` and `AGENTS.md` (idempotent, replaces an existing block).
+5. Run `python3 validate.py` in the new root; report the token count and tree.
 
 ## :import — extract tokens from a Tailwind v4 codebase
 
@@ -110,6 +113,7 @@ Extractor only: emits a DTCG tree + loss report, then hands off to `:sync` as so
 3. **Role proposal** (non-shadcn repos only — shadcn cssVars are already roles and are bridge-inverted). The report's `unnamedRole` records are proposals from usage: confirm each via `AskUserQuestion`, never guess. Rename confirmed tokens in the emitted tree before sync.
 4. Present the loss report from `<tmp-dir>/_import-report.json` — counts first, then records as yaml. Six categories, ranked: `unreachable` (class arrives via variable/prop — static analysis cannot see it), `off-scale` (new factual primitive minted), `raw literal` (arbitrary values like `bg-[#2563eb]`), `near-duplicate` (two primitives within ~2% — the drift finding), `unnamed role`, `unmappable`. Every record carries `file:line` or the source var. Also surface `conflicts` (same token, two values — kept/dropped) and `compoundVariants` (reported, never modeled). State what did not come through and why — a confident wrong token set is worse than a short one.
 5. Hand off to `:sync` with A = the emitted tree, B = the token root from step 2. `:sync` owns the diff, confirmation, write, and final validator run.
+6. After `:sync` writes, make sure the root holds `validate.py` and `gtc.py` (copy from `<skill-dir>/` if missing), then run `python3 <root>/gtc.py init`.
 
 Fixture check (run after any change to `import/import.mjs`): `node <skill-dir>/import/check.mjs <dir whose node_modules holds typescript@6 + postcss + tailwindcss@4 + @tailwindcss/node>` — asserts button size modes, theme light/dark, `$value` mirroring, no component colors, focus ring capture, validator exit 0. No such repo at hand:
 
@@ -133,4 +137,4 @@ A = the source (incoming tokens — another `.json`, or a `/tokens-sync` DTCG ex
 3. Map incoming names that don't fit GTC into the taxonomy (Figma collection paths → `global.color.*` etc.); list unmappable names instead of guessing. **Match on `$type` + design role, never on raw value alone** — equal values across types (`font-size 12` vs `radius.12`, `letter-spacing 0` vs `opacity.0`) are coincidences, not mappings.
 4. Present the diff grouped by change type; wait for confirmation. Never silently delete tokens that exist only in B — list them and let the user decide.
 5. Apply confirmed changes to B, preserving B's file layout (one file per folder stays one file per folder).
-6. Finish: run the validator; report applied / skipped counts.
+6. Finish: run the validator; report applied / skipped counts. If B holds `gtc.py`, run `python3 <B>/gtc.py init` so `TOKENS.md` and the pointer block match the new tokens.
