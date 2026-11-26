@@ -15,18 +15,29 @@ const DEPS = process.argv[2] || process.env.GTC_DEPS
 if (!DEPS || !fs.existsSync(path.join(DEPS, 'node_modules')))
   { console.error('usage: node check.mjs <repo with node_modules holding typescript/postcss/@tailwindcss/node>'); process.exit(2) }
 
-// synthetic repo: the two fixture files + borrowed node_modules
-const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'gtc-import-check-'))
-fs.mkdirSync(path.join(tmp, 'app'), { recursive: true })
-fs.mkdirSync(path.join(tmp, 'components/ui'), { recursive: true })
-fs.copyFileSync(path.join(HERE, 'fixture/globals.css'), path.join(tmp, 'app/globals.css'))
-fs.copyFileSync(path.join(HERE, 'fixture/button.tsx'), path.join(tmp, 'components/ui/button.tsx'))
-fs.writeFileSync(path.join(tmp, 'package.json'), '{"name":"gtc-import-fixture","version":"0.0.0"}\n')
-fs.symlinkSync(path.join(DEPS, 'node_modules'), path.join(tmp, 'node_modules'), 'junction')
+const globalsCss = fs.readFileSync(path.join(HERE, 'fixture/globals.css'), 'utf8')
+const tmps = []
+// synthetic repo: button.tsx + the given css files + borrowed deps (`links`: path in repo → path in DEPS)
+function importRepo(cssFiles, links = { node_modules: 'node_modules' }) {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'gtc-import-check-'))
+  tmps.push(tmp)
+  for (const [rel, text] of Object.entries({ ...cssFiles, 'components/ui/button.tsx': fs.readFileSync(path.join(HERE, 'fixture/button.tsx'), 'utf8') })) {
+    fs.mkdirSync(path.dirname(path.join(tmp, rel)), { recursive: true })
+    fs.writeFileSync(path.join(tmp, rel), text)
+  }
+  fs.writeFileSync(path.join(tmp, 'package.json'), '{"name":"gtc-import-fixture","version":"0.0.0"}\n')
+  for (const [at, from] of Object.entries(links)) {
+    fs.mkdirSync(path.dirname(path.join(tmp, at)), { recursive: true })
+    fs.symlinkSync(path.join(DEPS, from), path.join(tmp, at), 'junction')
+  }
+  const out = path.join(tmp, 'gtc-import')
+  const counts = JSON.parse(execFileSync(process.execPath, [path.join(HERE, 'import.mjs'), '--repo', tmp, '--out', out, '--json'], { stdio: ['ignore', 'pipe', 'inherit'] }))
+  return { out, counts }
+}
 
-const out = path.join(tmp, 'gtc-import')
 try {
-  execFileSync(process.execPath, [path.join(HERE, 'import.mjs'), '--repo', tmp, '--out', out, '--json'], { stdio: ['ignore', 'pipe', 'inherit'] })
+  const { out, counts } = importRepo({ 'app/globals.css': globalsCss })
+  assert.ok(counts.shadcn, 'shadcn not detected on the inline-vars fixture')
 
   // flatten the emitted tree the way validate.py does
   const tokens = {}
@@ -65,7 +76,21 @@ try {
   // 6 — validate.py exits 0 on the emitted tree
   execFileSync('python3', [path.join(HERE, '..', 'validate.py'), out], { stdio: ['ignore', 'pipe', 'inherit'] })
 
-  console.log(`check OK — ${Object.keys(tokens).length} fixture tokens, all six assertions hold`)
+  // 7 — entry at a non-candidate path (walkFiles fallback; once a TDZ crash) with the shadcn
+  // vars in an @imported file (once missed: shadcn detected from the entry text only)
+  const [head, ...vars] = globalsCss.split('\n')
+  const split = importRepo({ 'src/css/main.css': head + '\n@import "./theme.css";\n', 'src/css/theme.css': vars.join('\n') })
+  assert.ok(split.counts.shadcn, 'shadcn not detected when the vars live in an @imported file')
+  assert.strictEqual(split.counts.unnamedRole, rep.unnamedRole.length, 'split entry yields different unnamed roles than inline')
+
+  // 8 — pnpm layout: only the direct dep (tailwindcss) is linked at the top; postcss,
+  // @tailwindcss/node and typescript sit in node_modules/.pnpm/node_modules
+  importRepo({ 'app/globals.css': globalsCss }, {
+    'node_modules/tailwindcss': 'node_modules/tailwindcss',
+    'node_modules/.pnpm/node_modules': 'node_modules',
+  })
+
+  console.log(`check OK — ${Object.keys(tokens).length} fixture tokens, all eight assertions hold`)
 } finally {
-  fs.rmSync(tmp, { recursive: true, force: true })
+  for (const t of tmps) fs.rmSync(t, { recursive: true, force: true })
 }

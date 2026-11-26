@@ -3,7 +3,10 @@
  * /gtc-tokens:import — extract a GTC token set from a Tailwind v4 (+ shadcn) repo.
  *
  * Usage: node import.mjs --repo <path> [--css <entry.css>] [--out <dir>] [--only <subdir>]
- *                        [--ts <dir with a classic-API typescript>] [--json]
+ *                        [--deps <dir>] [--json]
+ *
+ * --deps (alias --ts): a dir whose node_modules supplies what the repo lacks —
+ * a classic-API typescript (TS 7 repos), or postcss / @tailwindcss/node.
  *
  * scanClasses (AST) collects the class inventory and attributes each class to a
  * component / cva variant / cva size. compileCss compiles Tailwind against
@@ -11,7 +14,7 @@
  * into GTC, written as a DTCG tree + loss report (<out>/_import-report.json).
  *
  * ponytail: zero new deps — typescript, postcss and @tailwindcss/node resolve
- * out of the target repo; every Tailwind v4 + shadcn repo ships all three.
+ * out of the target repo (then pnpm's hidden hoist dir, then --deps).
  */
 import fs from 'node:fs'
 import path from 'node:path'
@@ -26,39 +29,51 @@ function arg(name, dflt) {
 const REPO = path.resolve(arg('repo', '.'))
 const OUT = path.resolve(arg('out', path.join(REPO, 'gtc-import')))
 const ONLY = arg('only')          // e.g. --only components/ui: scope the class scan, keep docs chrome out
-const TS_FROM = path.resolve(arg('ts', REPO))   // a dir whose node_modules holds a classic-API typescript
+const DEPS_FROM = arg('deps', arg('ts'))   // fallback dir for typescript / postcss / @tailwindcss/node
 const JSON_ONLY = process.argv.includes('--json')
 
 function die(msg) { console.error('error: ' + msg); process.exit(2) }
 if (!fs.existsSync(REPO)) die(`repo not found: ${REPO}`)
 
 // ---------- repo deps ----------
-let req
-try { req = createRequire(path.join(REPO, 'package.json')) } catch { die(`no package.json in ${REPO}`) }
-function dep(name) { try { return req(name) } catch { return null } }
+// pnpm links only direct deps into node_modules; transitive ones (postcss, @tailwindcss/node)
+// sit in node_modules/.pnpm/node_modules — the default public-hoist dir — so try that next.
+const PNPM_HOIST = path.join(REPO, 'node_modules', '.pnpm', 'node_modules')
+const reqs = [
+  createRequire(path.join(REPO, 'package.json')),
+  fs.existsSync(PNPM_HOIST) && createRequire(path.join(PNPM_HOIST, 'x.js')),
+  DEPS_FROM && createRequire(path.join(path.resolve(DEPS_FROM), 'package.json')),
+].filter(Boolean)
+function dep(name, ok = () => true) {
+  for (const r of reqs) { try { const m = r(name); if (ok(m)) return m } catch {} }
+  return null
+}
+const DEPS_HINT = `\n\n       Install it in the repo, or in any directory and point the import at it:\n\n`
+  + `         mkdir -p /tmp/gtc-deps && cd /tmp/gtc-deps && npm init -y && npm i typescript@6 postcss @tailwindcss/node\n`
+  + `         node import.mjs --repo ${REPO} --deps /tmp/gtc-deps`
 const postcss = dep('postcss')
 const twNode = dep('@tailwindcss/node')
-if (!postcss) die('target repo has no `postcss` installed — run npm install there first')
+if (!postcss) die('no `postcss` resolvable from the target repo' + (DEPS_FROM ? ` or ${DEPS_FROM}` : '') + DEPS_HINT)
 
 // scanClasses needs the classic compiler API (createSourceFile + forEachChild + the is* guards).
 // TypeScript 7 is the native port: its npm package exports only `version`, and the AST moved to
 // `typescript/unstable/*`, where parsing goes through a project/snapshot handle API instead.
-// ponytail: resolve a classic TypeScript from --ts and say so when there is none, rather than
-// porting the scan onto an `unstable` surface. Port it when TS 7 is the only line left.
-const tsReq = TS_FROM === REPO ? req : createRequire(path.join(TS_FROM, 'package.json'))
-let ts = null
-try { ts = tsReq('typescript') } catch {}
-if (!ts) die(`no \`typescript\` resolvable from ${TS_FROM} — run npm install there first`)
-if (typeof ts.createSourceFile !== 'function')
-  die(`\`typescript\` at ${TS_FROM} is version ${ts.version ?? '7+'}, which no longer exposes the\n`
-    + `       classic compiler API the class scan needs. Install a classic-API TypeScript in any\n`
-    + `       directory and point the scan at it, leaving the target repo untouched:\n\n`
-    + `         mkdir -p /tmp/gtc-ts && cd /tmp/gtc-ts && npm init -y && npm i typescript@6\n`
-    + `         node import.mjs --repo ${REPO} --ts /tmp/gtc-ts`)
+// ponytail: take the first classic TypeScript on the resolve path and say so when there is none,
+// rather than porting the scan onto an `unstable` surface. Port it when TS 7 is the only line left.
+const ts = dep('typescript', t => typeof t.createSourceFile === 'function')
+if (!ts) {
+  const any = dep('typescript')
+  die(any
+    ? `\`typescript\` ${any.version ?? '7+'} no longer exposes the classic compiler API the class scan needs`
+      + ` — a classic-API TypeScript (6) is needed, leaving the target repo untouched.` + DEPS_HINT
+    : 'no `typescript` resolvable from the target repo' + (DEPS_FROM ? ` or ${DEPS_FROM}` : '') + DEPS_HINT)
+}
 
 // ---------- css entry + v4 gate ----------
 const CSS_CANDIDATES = ['app/globals.css', 'src/app/globals.css', 'styles/globals.css',
-  'src/styles/globals.css', 'app/index.css', 'src/index.css', 'src/app.css']
+  'src/styles/globals.css', 'app/index.css', 'src/index.css', 'src/styles/index.css', 'src/app.css']
+// before findCss: its walkFiles fallback reads this, and a const is unreadable until its line runs
+const IGNORE_DIRS = new Set(['node_modules', 'dist', 'build', 'out', 'coverage', 'public', 'vendor'])
 function findCss() {
   const given = arg('css')
   if (given) {
@@ -80,11 +95,8 @@ if (/@tailwind\s+(base|components|utilities)/.test(entryCss))
   die('Tailwind v3 setup detected (`@tailwind base`). :import is v4-only — upgrade the repo to v4 first.')
 if (!/@import\s+["']tailwindcss/.test(entryCss))
   die(`${path.relative(REPO, ENTRY)} does not \`@import "tailwindcss"\` — not a Tailwind v4 entry. Pass --css <path>.`)
-const SHADCN = /--(background|primary)\s*:/.test(entryCss) ||
-  /@theme[^{]*\{[^}]*--color-(background|primary)\s*:/s.test(entryCss)
 
 // ---------- shared helpers ----------
-const IGNORE_DIRS = new Set(['node_modules', 'dist', 'build', 'out', 'coverage', 'public', 'vendor'])
 function* walkFiles(dir, exts) {
   let entries
   try { entries = fs.readdirSync(dir, { withFileTypes: true }) } catch { return }
@@ -355,6 +367,7 @@ async function compileCss(candidates) {
   }
   // ponytail: fallback when @tailwindcss/node is absent — proxy entry next to the
   // real one so relative @imports resolve, then npx the v4 CLI.
+  console.error('warning: no `@tailwindcss/node` resolvable — falling back to `npx @tailwindcss/cli@4` (network); pass --deps to avoid')
   const dir = path.dirname(ENTRY)
   const proxy = path.join(dir, '.gtc-import-entry.css')
   const content = path.join(dir, '.gtc-import-candidates.txt')
@@ -1058,6 +1071,9 @@ const candidates = [...inventory.classes.keys()]
 if (!candidates.length) die('class scan found zero classes — is this the right repo?')
 const css = await compileCss(candidates)
 const compiled = walkCss(css, new Set(candidates))
+// shadcn = its role vars exist. Read from the compiled CSS, not the entry file, so vars kept in
+// an @imported file (shadcn-admin's theme.css) count; build() reads this below.
+const SHADCN = ['background', 'primary', 'color-background', 'color-primary'].some(v => compiled.vars.light.has(v))
 const resolver = makeResolver(compiled.vars)
 const { tokens, report } = build(inventory, compiled, resolver)
 const nFiles = emit(tokens, report)

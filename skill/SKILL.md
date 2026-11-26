@@ -99,23 +99,23 @@ Use the matching verb per action — `created` / `deleted` / `moved` — and for
 
 ## :import — extract tokens from a Tailwind v4 codebase
 
-Extractor only: emits a DTCG tree + loss report, then hands off to `:sync` as source A. Tailwind v4 only — a v3 repo (`@tailwind base`, no `@theme`) gets "upgrade to v4 first" and stops. The script resolves `typescript` / `postcss` / `@tailwindcss/node` out of the target repo; no install step.
+Extractor only: emits a DTCG tree + loss report, then hands off to `:sync` as source A. Tailwind v4 only — a v3 repo (`@tailwind base`, no `@theme`) gets "upgrade to v4 first" and stops. The script resolves `typescript` / `postcss` / `@tailwindcss/node` out of the target repo, then pnpm's `node_modules/.pnpm/node_modules`, then `--deps <dir>`; no install step.
 
-**TypeScript 7 repos need `--ts`.** The class scan uses the classic compiler API, which the TS 7 native port dropped. The script detects this and prints the fix; pass it on, never work around it: install `typescript@6` in a throwaway directory and run with `--ts <that dir>`, leaving the target repo's own dependencies untouched.
+**TypeScript 7 repos, or repos missing a dep, need `--deps`** (alias `--ts`). The class scan uses the classic compiler API, which the TS 7 native port dropped. The script detects a missing or TS 7-only dep and prints the fix; pass it on, never work around it (no `NODE_PATH`): install `typescript@6 postcss @tailwindcss/node` in a throwaway directory and run with `--deps <that dir>`, leaving the target repo's own dependencies untouched.
 
 **Input (obligatory, two steps — never skip, never assume from cwd):**
 
 - Step 1 — "Enter the path to the repo to import from." Tip: `Tip: repo root, e.g. ~/Projects/my-app`. Verify it exists and holds a Tailwind v4 setup (a CSS file with `@import "tailwindcss"`).
 - Step 2 — "Enter the path to the token root to sync into (B), or `new` to bootstrap one." `new` routes to `:new` first, then continues.
 
-1. Run `node <skill-dir>/import/import.mjs --repo <repo> --out <tmp-dir>`. If the repo has docs/examples chrome alongside its component library, offer `--only <subdir>` (e.g. `--only components/ui`) to scope extraction. The script detects the CSS entry (or pass `--css`), detects shadcn by `--background`/`--primary` cssVars, and does both legs: AST class inventory with component/variant/size attribution, Tailwind compile of exactly that inventory, join, GTC routing, DTCG emit.
+1. Run `node <skill-dir>/import/import.mjs --repo <repo> --out <tmp-dir>`. If the repo has docs/examples chrome alongside its component library, offer `--only <subdir>` (e.g. `--only components/ui`) to scope extraction. The script detects the CSS entry (or pass `--css`), detects shadcn by `--background`/`--primary` cssVars in the compiled CSS (so vars in an `@import`ed file count), and does both legs: AST class inventory with component/variant/size attribution, Tailwind compile of exactly that inventory, join, GTC routing, DTCG emit.
 2. Run `python3 <skill-dir>/validate.py <tmp-dir>` — must exit 0 before anything is shown as a token set.
 3. **Role proposal** (non-shadcn repos only — shadcn cssVars are already roles and are bridge-inverted). The report's `unnamedRole` records are proposals from usage: confirm each via `AskUserQuestion`, never guess. Rename confirmed tokens in the emitted tree before sync.
 4. Present the loss report from `<tmp-dir>/_import-report.json` — counts first, then records as yaml. Six categories, ranked: `unreachable` (class arrives via variable/prop — static analysis cannot see it), `off-scale` (new factual primitive minted), `raw literal` (arbitrary values like `bg-[#2563eb]`), `near-duplicate` (two primitives within ~2% — the drift finding), `unnamed role`, `unmappable`. Every record carries `file:line` or the source var. Also surface `conflicts` (same token, two values — kept/dropped) and `compoundVariants` (reported, never modeled). State what did not come through and why — a confident wrong token set is worse than a short one.
 5. Hand off to `:sync` with A = the emitted tree, B = the token root from step 2. `:sync` owns the diff, confirmation, write, and final validator run.
 6. After `:sync` writes, make sure the root holds `validate.py` and `gtc.py` (copy from `<skill-dir>/` if missing), then run `python3 <root>/gtc.py init`.
 
-Fixture check (run after any change to `import/import.mjs`): `node <skill-dir>/import/check.mjs <dir whose node_modules holds typescript@6 + postcss + tailwindcss@4 + @tailwindcss/node>` — asserts button size modes, theme light/dark, `$value` mirroring, no component colors, focus ring capture, validator exit 0. No such repo at hand:
+Fixture check (run after any change to `import/import.mjs`): `node <skill-dir>/import/check.mjs <dir whose node_modules holds typescript@6 + postcss + tailwindcss@4 + @tailwindcss/node>` — asserts button size modes, theme light/dark, `$value` mirroring, no component colors, focus ring capture, validator exit 0, entry at a non-candidate path with vars in an `@import`ed file, pnpm layout. No such repo at hand:
 
 ```
 mkdir -p /tmp/gtc-deps && cd /tmp/gtc-deps && echo '{"name":"d","private":true}' > package.json
