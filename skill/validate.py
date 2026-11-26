@@ -5,8 +5,10 @@ truth and never points out), a theme/component token that stores a raw value (th
 alias), a reference cycle (a token must never resolve back to itself, directly or
 through a chain), a color token under component (looks live in theme), a non-factual
 scale key (global.size-unit.12 must be "12px"), theme and size modes mixed in one token,
-or a $value that doesn't mirror the default mode (light / medium). A mode word appearing
-in a token path is fine — it can be a Classifier/Identifier naming a look or context slot.
+a $value that doesn't mirror the default mode (light / medium), or a global token carrying
+a theme or size mode (a mode on a global token is a brand; $value is the default brand).
+A mode word appearing in a token path is fine — it can be a Classifier/Identifier naming
+a look or context slot.
 Run: python3 validate.py [token-root] (defaults to the script's folder)"""
 import json, re, sys, pathlib
 
@@ -76,10 +78,14 @@ def main():
             errors.append(f"color token in component (looks live in theme): {name}")
         # effects keys (shadow.1…3, blur.1…3) are elevation roles, not factual px
         if name.startswith("global.") and key.isdigit() and not name.startswith("global.effects."):
-            if node.get("$type") == "dimension" and node["$value"] != f"{key}px":
-                errors.append(f'scale key not factual: {name} = {json.dumps(node["$value"])} (expected "{key}px")')
-            if ".opacity." in name and node.get("$type") == "number" and node["$value"] != int(key) / 100:
-                errors.append(f'scale key not factual: {name} = {node["$value"]} (expected {int(key) / 100})')
+            for v in [node["$value"], *modes.values()]:  # a brand value on a factual key must be factual too
+                if node.get("$type") == "dimension" and v != f"{key}px":
+                    errors.append(f'scale key not factual: {name} = {json.dumps(v)} (expected "{key}px")')
+                if ".opacity." in name and node.get("$type") == "number" and v != int(key) / 100:
+                    errors.append(f'scale key not factual: {name} = {v} (expected {int(key) / 100})')
+        # a mode on a global token is a brand; theme and size modes belong to theme.* / component.*
+        if name.startswith("global.") and modes.keys() & (THEME_MODES | SIZE_MODES):
+            errors.append(f"theme/size mode on a global token (global modes are brands): {name} [{', '.join(modes)}]")
         if modes:
             if modes.keys() & THEME_MODES and modes.keys() & SIZE_MODES:
                 errors.append(f"theme and size modes mixed in one token: {name} [{', '.join(modes)}]")

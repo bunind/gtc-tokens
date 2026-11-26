@@ -28,6 +28,6 @@ jobs:
           mkdir -p /tmp/deps && cd /tmp/deps
           echo '{"name":"gtc-ci-deps","private":true}' > package.json
           # typescript pinned to 6: the class scan uses the classic compiler API, which the
-          # TypeScript 7 native port dropped (see the --ts note in import.mjs).
+          # TypeScript 7 native port dropped (see the --deps note in import.mjs).
           npm i --no-save --silent typescript@6 postcss tailwindcss@4 @tailwindcss/node
           node "$GITHUB_WORKSPACE/skill/import/check.mjs" /tmp/deps
