@@ -5,6 +5,7 @@
   get <path>                 file, type, modes, resolved value, what aliases it, where CSS uses it
   set <path[@mode]> <value> [<path[@mode]> <value> ...] [--type T] [--no-build]
                              change or create tokens, then validate, rewrite TOKENS.md, npm run build - one call
+                             a brand is a mode of a global token: set global.color.brand.3@ocean '#0e7490'
   rm <path>                  delete a token; refused while a token or CSS still uses it
   sweep                      delete inline style overrides on components that pin a token's old value
                              (left by `set`, or by a CSS edit since TOKENS.md was written); nothing else
@@ -15,7 +16,10 @@ ROOT = pathlib.Path(__file__).resolve().parent
 PROJECT = ROOT.parent
 REL = ROOT.name
 REF = re.compile(r"^\{([^}]+)\}$")
-# ponytail: same sets as validate.py; a third axis (brand) needs both edited plus the build's selectors
+# same sets as validate.py. Any other mode name is a brand, and lives on global tokens only: theme and
+# component tokens follow through their aliases, so brand x theme x size never multiplies.
+# ponytail: resolve() takes one mode, so `get` shows a theme token per theme, not per brand x theme
+BRAND = re.compile(r"^[a-z][a-z0-9-]*$")
 THEME_MODES = {"light", "dark", "high-contrast"}
 SIZE_MODES = {"2xsmall", "xsmall", "small", "medium", "large", "xlarge", "2xlarge"}
 BLOCK = f"""<!-- gtc-tokens -->
@@ -217,6 +221,7 @@ def render(idx):
         "Colors and anything that differs per theme -> theme.*. Size, radius, font-size of one component, per size mode -> component.*.",
         "CSS variable = -- + path with . -> -  (theme.text.link -> --theme-text-link). New token file: <group>/<2nd segment>/<2nd segment>.json.",
         "Modes: theme light|dark|high-contrast, size small|medium|large; one kind per token. Changing a global value moves every alias of it.",
+        "Brand: a mode of global tokens only, any name (global.color.brand.3@ocean '#0e7490'). Theme tokens follow through their alias: never add a brand or 'ocean-dark' mode to theme/component.",
         "",
         "## CSS usage (selector  property: tokens)",
         *css_usage(idx),
@@ -302,10 +307,18 @@ def cmd_set(args):
     for key, raw in zip(args[::2], args[1::2]):
         path, _, mode = key.partition("@")
         v = parse(raw)
-        if mode and mode not in THEME_MODES | SIZE_MODES:
-            fail(f"refused: mode '{mode}' unknown. Theme modes: {' '.join(sorted(THEME_MODES))}; size modes: {' '.join(sorted(SIZE_MODES))}.\n"
-                 "A second theme axis (brand x theme) is not supported by this token set yet: stop and report it; "
-                 "do not combine modes ('ocean-dark') or edit validate.py or gtc.py.")
+        glob = path.startswith("global.")
+        if mode and glob and (mode in THEME_MODES | SIZE_MODES or not BRAND.match(mode)):
+            fail(f"refused: {path}@{mode}: a global token takes brand modes only (lowercase name, e.g. @ocean). "
+                 "Theme modes go on theme.*, size modes on component.*.")
+        if mode and not glob and mode not in THEME_MODES | SIZE_MODES:
+            fail(f"refused: mode '{mode}' unknown on {path}. Theme modes: {' '.join(sorted(THEME_MODES))}; size modes: {' '.join(sorted(SIZE_MODES))}.\n"
+                 f"If it is a brand: a brand is a mode of the global tokens, not of theme/component. Give the brand its own values "
+                 f"on the global steps this token aliases, per theme mode, e.g.\n"
+                 f"  python3 {REL}/gtc.py set global.color.brand.3@{mode.split('-')[0]} '#0e7490'\n"
+                 "Light, dark and every size then follow through the aliases.\n"
+                 "If it is a new theme mode (not a brand): this tool does not support one yet; stop and report it.\n"
+                 "Either way, do not combine modes ('ocean-dark') or edit validate.py or gtc.py.")
         if not path.startswith("global.") and not (isinstance(v, str) and REF.match(v)):
             fail(f"refused: raw value {raw} in {path}. theme/component only alias. Add it to global first, e.g.\n"
                  f"  python3 {REL}/gtc.py set global.color.<ramp>.<step> {raw} {key} {{global.color.<ramp>.<step>}}")
@@ -333,7 +346,8 @@ def cmd_set(args):
         if mode:
             if not ms:
                 default = "medium" if mode in SIZE_MODES else "light"
-                ms = n.setdefault("$extensions", {}).setdefault("mode", {default: n["$value"]})
+                # a brand mode has no default key: $value is the default brand
+                ms = n.setdefault("$extensions", {}).setdefault("mode", {} if glob else {default: n["$value"]})
             ms[mode] = v
             if mode in ("light", "medium"):
                 n["$value"] = v

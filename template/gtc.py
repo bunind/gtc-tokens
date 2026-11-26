@@ -5,7 +5,10 @@
   get <path>                 file, type, modes, resolved value, what aliases it, where CSS uses it
   set <path[@mode]> <value> [<path[@mode]> <value> ...] [--type T] [--no-build]
                              change or create tokens, then validate, rewrite TOKENS.md, npm run build - one call
+                             a brand is a mode of a global token: set global.color.brand.3@ocean '#0e7490'
   rm <path>                  delete a token; refused while a token or CSS still uses it
+  sweep                      delete inline style overrides on components that pin a token's old value
+                             (left by `set`, or by a CSS edit since TOKENS.md was written); nothing else
 Exit: 0 ok, 1 refused or invalid (files untouched), 2 build failed (tokens written)."""
 import json, re, sys, pathlib, subprocess
 
@@ -13,12 +16,16 @@ ROOT = pathlib.Path(__file__).resolve().parent
 PROJECT = ROOT.parent
 REL = ROOT.name
 REF = re.compile(r"^\{([^}]+)\}$")
-# ponytail: same sets as validate.py; a third axis (brand) needs both edited plus the build's selectors
+# same sets as validate.py. Any other mode name is a brand, and lives on global tokens only: theme and
+# component tokens follow through their aliases, so brand x theme x size never multiplies.
+# ponytail: resolve() takes one mode, so `get` shows a theme token per theme, not per brand x theme
+BRAND = re.compile(r"^[a-z][a-z0-9-]*$")
 THEME_MODES = {"light", "dark", "high-contrast"}
 SIZE_MODES = {"2xsmall", "xsmall", "small", "medium", "large", "xlarge", "2xlarge"}
 BLOCK = f"""<!-- gtc-tokens -->
 Design tokens (GTC) live in {REL}/. Read {REL}/TOKENS.md first: which token each CSS selector uses, then every token and value.
 Change tokens only with `python3 {REL}/gtc.py set <path>[@mode] <value> ...` (validates, rebuilds, one call). Never hand-edit {REL}/**/*.json, validate.py or gtc.py.
+After any restyle (set or a CSS edit), run `python3 {REL}/gtc.py sweep`: it deletes inline style="" overrides that still hold the old value.
 <!-- /gtc-tokens -->"""
 
 
@@ -70,7 +77,8 @@ def dump(n, ind=0):
     return "{\n" + ",\n".join(f"{pad}{json.dumps(k)}: {dump(v, ind + 1)}" for k, v in n.items()) + "\n" + "  " * ind + "}"
 
 
-def css_usage(idx):
+def css_rules(idx):
+    # -> [(selector, [(prop, value with token paths)])]
     # ponytail: plain CSS only, naive rule regex (innermost braces); add .scss/.tsx scanning when a project needs it
     names = {"--" + p.replace(".", "-"): p for p in idx}
     out = []
@@ -87,10 +95,119 @@ def css_usage(idx):
                     continue  # custom-property definitions (e.g. generated tokens.css) are not usage
                 new = re.sub(r"var\((--[\w-]+)\)", lambda m: names.get(m[1], m[0]), val.strip())
                 if new != val.strip():
-                    decls.append(f"{prop}: {new}")
+                    decls.append((prop, new))
             if decls:
-                out.append(f"{' '.join(sel.split())}  " + " · ".join(decls))
+                out.append((" ".join(sel.split()), decls))
     return out
+
+
+def css_usage(idx):
+    return [f"{sel}  " + " · ".join(f"{p}: {v}" for p, v in decls) for sel, decls in css_rules(idx)]
+
+
+# --- inline overrides: style="" on a component that repeats a token's value, so it pins that value when the token moves
+MARKUP = {".html", ".htm", ".vue", ".svelte", ".astro"}  # ponytail: style="..." strings only; add JSX style={{}} parsing when a React project needs it
+TAG = re.compile(r"<([a-zA-Z][\w-]*)((?:\s+[^\s=>/]+(?:\s*=\s*(?:\"[^\"]*\"|'[^']*'|[^\s>]+))?)*)\s*(/?)>")
+PENDING = ".overrides"
+
+
+def norm(v):
+    v = re.sub(r"\s+", " ", re.sub(r"\s*!important\s*$", "", str(v).strip().lower()))
+    return re.sub(r"#([0-9a-f])([0-9a-f])([0-9a-f])\b", lambda m: "#" + "".join(c * 2 for c in m.groups()), v)
+
+
+def value(expr, idx):
+    # declaration value with every token path resolved (default mode); px-only calc() evaluated
+    v = re.sub(r"\b[a-z][\w-]*(?:\.[\w-]+)+", lambda m: str(resolve(idx, m[0])) if m[0] in idx else m[0], expr)
+    inner = v[5:-1] if v.startswith("calc(") and v.endswith(")") else ""
+    if "px" in inner and re.fullmatch(r"[\d.\s+\-*/()]+", inner.replace("px", "")):
+        v = f"{eval(inner.replace('px', '')):g}px"  # ponytail: digits and operators only, checked above; rem/% calc stays as text
+    return norm(v)
+
+
+def map_rules():
+    # CSS usage as of the last TOKENS.md write: the baseline that shows a CSS edit made since
+    f = ROOT / "TOKENS.md"
+    text = f.read_text() if f.exists() else ""
+    if "## CSS usage" not in text:
+        return None
+    rules = []
+    for line in text.split("## CSS usage", 1)[1].split("\n## ", 1)[0].splitlines()[1:]:
+        sel, sep, body = line.partition("  ")
+        if sep:
+            rules.append((sel, [tuple(x.strip() for x in d.partition(":")[::2]) for d in body.split(" · ")]))
+    return rules
+
+
+def pinned(old_rules, old_idx, new_rules, new_idx):
+    # declarations whose value moved: [prop, old value, old parts that changed]. A removed declaration is skipped:
+    # its overrides now carry the style, deleting them would change the page.
+    new = {(s, p): v for s, ds in new_rules for p, v in ds}
+    out = []
+    for s, ds in old_rules:
+        for p, v in ds:
+            if (s, p) not in new:
+                continue
+            a, b = value(v, old_idx), value(new[(s, p)], new_idx)
+            c = [p, a, [x for x in a.split() if x not in b.split()]]
+            if a != b and c not in out:
+                out.append(c)
+    return out
+
+
+def hit(crit):
+    # an override matches the property and the old value, or is a longhand (border-color) of a changed shorthand part
+    return lambda p, v: any((p == cp and v == old) or (p.startswith(cp + "-") and v in parts) for cp, old, parts in crit)
+
+
+def scan(drop=None):
+    # every inline declaration on a component in the markup -> [(file, prop, value, dropped)]; drop(prop, value) deletes it.
+    # Component = custom element (<ui-button>) or a class a token-using CSS selector names. Others (<i style="height: 36px">) are skipped.
+    _, idx = load()
+    classes = {c for sel, _ in css_rules(idx) for c in re.findall(r"\.([\w-]+)", sel)}
+    out = []
+    for f in sorted(PROJECT.rglob("*")):
+        if f.suffix not in MARKUP or ROOT in f.parents or {"node_modules", "dist", ".git"} & set(f.parts):
+            continue
+        text = f.read_text(errors="ignore")
+
+        def tag(m):
+            name, attrs, end = m[1], m[2], m[3]
+            st = re.search(r"\sstyle=\"([^\"]*)\"", attrs)
+            cl = re.search(r"\sclass(?:Name)?=\"([^\"]*)\"", attrs)
+            if not st or not ("-" in name or (cl and classes & set(cl[1].split()))):
+                return m[0]
+            keep = []
+            for d in filter(str.strip, st[1].split(";")):
+                p, _, v = (x.strip() for x in d.partition(":"))
+                gone = bool(drop and drop(p.lower(), norm(v)))
+                out.append((f, p.lower(), norm(v), gone))
+                gone or keep.append(d.strip())
+            attrs = attrs.replace(st[0], f' style="{"; ".join(keep)}"' if keep else "")
+            return f"<{name}{attrs}{' ' if end and not attrs.endswith(' ') else ''}{end}>" if end else f"<{name}{attrs}>"
+
+        new = TAG.sub(tag, text)
+        if drop and new != text:
+            f.write_text(new)
+    return out
+
+
+def pending(new):
+    # criteria saved by an earlier set, plus new ones
+    f = ROOT / PENDING
+    old = json.loads(f.read_text()) if f.exists() else []
+    return old + [c for c in new if c not in old]
+
+
+def cmd_sweep():
+    _, idx = load()
+    base = map_rules()
+    crit = pending(pinned(base, idx, css_rules(idx), idx) if base else [])
+    gone = [h for h in scan(hit(crit)) if h[3]] if crit else []
+    (ROOT / PENDING).unlink(missing_ok=True)
+    write_map()
+    props = sorted({f"{p}: {v}" for _, p, v, _ in gone})
+    print(f"ok: removed {len(gone)} inline overrides in {len({h[0] for h in gone})} files" + (" (" + ", ".join(props) + ")" if props else ""))
 
 
 def render(idx):
@@ -104,6 +221,7 @@ def render(idx):
         "Colors and anything that differs per theme -> theme.*. Size, radius, font-size of one component, per size mode -> component.*.",
         "CSS variable = -- + path with . -> -  (theme.text.link -> --theme-text-link). New token file: <group>/<2nd segment>/<2nd segment>.json.",
         "Modes: theme light|dark|high-contrast, size small|medium|large; one kind per token. Changing a global value moves every alias of it.",
+        "Brand: a mode of global tokens only, any name (global.color.brand.3@ocean '#0e7490'). Theme tokens follow through their alias: never add a brand or 'ocean-dark' mode to theme/component.",
         "",
         "## CSS usage (selector  property: tokens)",
         *css_usage(idx),
@@ -181,16 +299,26 @@ def cmd_set(args):
     args = [a for i, a in enumerate(args) if a not in ("--type", "--no-build") and (i == 0 or args[i - 1] != "--type")]
     if not args or len(args) % 2:
         fail("usage: gtc.py set <path>[@mode] <value> [<path>[@mode] <value> ...] [--type T] [--no-build]")
+    _, old_idx = load()
+    old_rules = map_rules() or css_rules(old_idx)
     trees, idx = load()
     before = {f: f.read_text() for f in trees}
     dirty, done = set(), []
     for key, raw in zip(args[::2], args[1::2]):
         path, _, mode = key.partition("@")
         v = parse(raw)
-        if mode and mode not in THEME_MODES | SIZE_MODES:
-            fail(f"refused: mode '{mode}' unknown. Theme modes: {' '.join(sorted(THEME_MODES))}; size modes: {' '.join(sorted(SIZE_MODES))}.\n"
-                 "A second theme axis (brand x theme) is not supported by this token set yet: stop and report it; "
-                 "do not combine modes ('ocean-dark') or edit validate.py or gtc.py.")
+        glob = path.startswith("global.")
+        if mode and glob and (mode in THEME_MODES | SIZE_MODES or not BRAND.match(mode)):
+            fail(f"refused: {path}@{mode}: a global token takes brand modes only (lowercase name, e.g. @ocean). "
+                 "Theme modes go on theme.*, size modes on component.*.")
+        if mode and not glob and mode not in THEME_MODES | SIZE_MODES:
+            fail(f"refused: mode '{mode}' unknown on {path}. Theme modes: {' '.join(sorted(THEME_MODES))}; size modes: {' '.join(sorted(SIZE_MODES))}.\n"
+                 f"If it is a brand: a brand is a mode of the global tokens, not of theme/component. Give the brand its own values "
+                 f"on the global steps this token aliases, per theme mode, e.g.\n"
+                 f"  python3 {REL}/gtc.py set global.color.brand.3@{mode.split('-')[0]} '#0e7490'\n"
+                 "Light, dark and every size then follow through the aliases.\n"
+                 "If it is a new theme mode (not a brand): this tool does not support one yet; stop and report it.\n"
+                 "Either way, do not combine modes ('ocean-dark') or edit validate.py or gtc.py.")
         if not path.startswith("global.") and not (isinstance(v, str) and REF.match(v)):
             fail(f"refused: raw value {raw} in {path}. theme/component only alias. Add it to global first, e.g.\n"
                  f"  python3 {REL}/gtc.py set global.color.<ramp>.<step> {raw} {key} {{global.color.<ramp>.<step>}}")
@@ -218,7 +346,8 @@ def cmd_set(args):
         if mode:
             if not ms:
                 default = "medium" if mode in SIZE_MODES else "light"
-                ms = n.setdefault("$extensions", {}).setdefault("mode", {default: n["$value"]})
+                # a brand mode has no default key: $value is the default brand
+                ms = n.setdefault("$extensions", {}).setdefault("mode", {} if glob else {default: n["$value"]})
             ms[mode] = v
             if mode in ("light", "medium"):
                 n["$value"] = v
@@ -239,14 +368,23 @@ def cmd_set(args):
         fail("invalid, nothing written:\n" + r.stdout.strip())
     write_map()
     _, idx = load()
+    crit = pending(pinned(old_rules, old_idx, css_rules(idx), idx))
+    rows = [r for r in scan() if hit(crit)(r[1], r[2])] if crit else []
+    if rows:
+        (ROOT / PENDING).write_text(json.dumps(crit))
+        what = sorted({f"{p}: {v}" for _, p, v, _ in rows})
+        note = (f"\n{len(rows)} inline overrides in {len({r[0] for r in rows})} files pin the old value ({', '.join(what[:6])}"
+                f"{', ...' if len(what) > 6 else ''}). Run: python3 {REL}/gtc.py sweep")
+    else:
+        note = ""
     out = " · ".join(f"{k} = {fmt(resolve(idx, k.partition('@')[0], k.partition('@')[2] or None))}" for k in done)
     pkg = PROJECT / "package.json"
     if build and pkg.exists() and "build" in json.loads(pkg.read_text()).get("scripts", {}):
         b = subprocess.run(["npm", "run", "build", "--silent"], cwd=PROJECT, capture_output=True, text=True)
         if b.returncode:
-            fail(f"tokens written ({out}), build FAILED:\n" + "\n".join((b.stdout + b.stderr).strip().splitlines()[-15:]), 2)
+            fail(f"tokens written ({out}), build FAILED:\n" + "\n".join((b.stdout + b.stderr).strip().splitlines()[-15:]) + note, 2)
         out += " · built"
-    print("ok: " + out)
+    print("ok: " + out + note)
 
 
 def users(idx, path):
@@ -289,6 +427,49 @@ def cmd_rm(path):
     print("ok: removed " + path + " · " + write_map())
 
 
+def selftest():
+    # set path (alias moved via global, calc height, shorthand border) and CSS-edit path (padding rewired); decoys stay
+    import tempfile
+    global ROOT, PROJECT
+    with tempfile.TemporaryDirectory() as d:
+        PROJECT = pathlib.Path(d)
+        ROOT = PROJECT / "tokens"
+        tok = lambda t: (ROOT / "global/x/x.json").parent.mkdir(parents=True, exist_ok=True) or (ROOT / "global/x/x.json").write_text(json.dumps(t))
+        g = {"a": "#8e90f5", "b": "#d4d4d4", "s24": "24px", "s32": "32px", "s6": "6px", "b1": "1px"}
+        tok({"global": {"x": {k: {"$value": v} for k, v in g.items()}}})
+        (ROOT / "theme/y").mkdir(parents=True)
+        (ROOT / "theme/y/y.json").write_text('{"theme": {"y": {"brand": {"$value": "{global.x.a}"}}}}')
+        css = (".btn { background: var(--theme-y-brand); height: calc(var(--global-x-s24) + 2 * var(--global-x-s6)); "
+               "border: var(--global-x-b1) solid var(--global-x-b); }\n.card { padding: var(--global-x-s24); }\n"
+               ".chart i { height: 36px; background: #8e90f5; }\n")
+        (PROJECT / "page.css").write_text(css)
+        page = ('<ui-button style="background: #8E90F5">a</ui-button>\n<ui-button style="background: #000">b</ui-button>\n'
+                '<ui-button style="height: 36px; border-color: #d4d4d4; gap: 2px">c</ui-button>\n<i style="height: 36px"></i>\n'
+                '<div class="btn" style="background:#8e90f5"></div>\n<ui-card style="padding: 24px"></ui-card>\n')
+        (PROJECT / "p.html").write_text(page)
+        write_map()
+        _, old = load()
+        tok({"global": {"x": {k: {"$value": v} for k, v in (g | {"a": "#7c3aed", "b": "#a8a29e", "s24": "33px"}).items()}}})
+        _, new = load()
+        crit = pinned(map_rules(), old, css_rules(new), new)
+        assert ["background", "#8e90f5", ["#8e90f5"]] in crit and ["height", "36px", ["36px"]] in crit, crit
+        assert ["border", "1px solid #d4d4d4", ["#d4d4d4"]] in crit, crit
+        scan(hit(crit))
+        (PROJECT / "page.css").write_text(css.replace("padding: var(--global-x-s24)", "padding: var(--global-x-s32)"))
+        tok({"global": {"x": {k: {"$value": v} for k, v in g.items()}}})  # tokens back: only the CSS edit differs from TOKENS.md
+        _, idx = load()
+        crit = pinned(map_rules(), idx, css_rules(idx), idx)
+        assert crit == [["padding", "24px", ["24px"]]], crit
+        scan(hit(crit))
+        got = (PROJECT / "p.html").read_text()
+        want = ('<ui-button>a</ui-button>\n<ui-button style="background: #000">b</ui-button>\n'
+                '<ui-button style="gap: 2px">c</ui-button>\n<i style="height: 36px"></i>\n'
+                '<div class="btn"></div>\n<ui-card></ui-card>\n')
+        assert got == want, got
+        assert (PROJECT / "page.css").read_text().count("#8e90f5") == 1  # CSS never touched by sweep
+    print("ok: selftest")
+
+
 if __name__ == "__main__":
     a = sys.argv[1:]
     if a[:1] == ["set"]:
@@ -297,6 +478,10 @@ if __name__ == "__main__":
         cmd_get(a[1])
     elif a[:1] == ["rm"] and len(a) == 2:
         cmd_rm(a[1])
+    elif a[:1] == ["sweep"]:
+        cmd_sweep()
+    elif a[:1] == ["selftest"]:
+        selftest()
     elif a[:1] == ["map"]:
         print(write_map())
     elif a[:1] == ["init"]:

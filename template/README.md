@@ -96,6 +96,14 @@ Modes live under `$extensions.mode`. `$value` carries the default [light / mediu
 }
 ```
 
+**Brands.** A brand is a mode of **Global** tokens — never of Theme or Component. A Global token holds one raw value per brand under `$extensions.mode`, keyed by the brand's name [any lowercase name]; `$value` is the default brand:
+
+```json
+"3": { "$type": "color", "$value": "#6366f1", "$extensions": { "mode": { "ocean": "#0e7490" } } }
+```
+
+Theme tokens keep aliasing the same Global steps per theme mode, so light, dark and every size come out right for every brand with no new theme lines: brand, theme and size stay three independent switches and never multiply. A brand that needs a different dark look gets different values on the Global steps the dark mode aliases — never a combined mode [`ocean-dark`] and never a brand mode on a Theme token. A brand overrides only the steps it changes; the rest fall back to the default brand. In CSS a brand is one block of Global overrides [`[data-brand="ocean"] { --global-color-brand-3: #0e7490; }`], set on the root element: Theme variables are computed where they are declared, so a brand set on an inner element does not reach them.
+
 ## Alias direction
 
 - **Global** aliases nothing — the source of truth for raw values.
@@ -105,7 +113,7 @@ Modes live under `$extensions.mode`. `$value` carries the default [light / mediu
 
 The default flow: Component aliases Global for structural values; a component's look lives in Theme [`theme.button.*`], never as Component color tokens. The edge case: a structural value that must switch on a theme mode routes through Theme first. Say text should be bolder in light mode and thinner in dark: `component.button.font-weight → theme.button.font-weight`, with modes `light → {global.typography.font-weight.bold}`, `dark → {global.typography.font-weight.regular}`. The group is decided by *what the value varies by* [theme mode → Theme], not by token type.
 
-`validate.py` enforces this: every `{alias}` resolves, no `global.*` token holds an alias, no `theme.*` / `component.*` token stores a raw value, and no reference cycle exists. It also enforces the model rules it can see mechanically — no color tokens under `component.*`, factual numeric scale keys [`size-unit.12` = `"12px"`, `opacity.8` = `0.08`; effects keys are elevation roles and exempt], no theme and size modes mixed in one token, and `$value` mirroring the default mode [`light` / `medium`] — and warns when a mode-carrying token's own path contains one of its mode names. Run `python3 validate.py`.
+`validate.py` enforces this: every `{alias}` resolves, no `global.*` token holds an alias, no `theme.*` / `component.*` token stores a raw value, and no reference cycle exists. It also enforces the model rules it can see mechanically — no color tokens under `component.*`, factual numeric scale keys [`size-unit.12` = `"12px"`, `opacity.8` = `0.08`; effects keys are elevation roles and exempt], no theme and size modes mixed in one token, no theme or size mode on a Global token [a Global mode is a brand], and `$value` mirroring the default mode [`light` / `medium`] — and warns when a mode-carrying token's own path contains one of its mode names. Run `python3 validate.py`.
 
 ## Working the tokens
 
@@ -127,6 +135,7 @@ Global holds raw values and aliases nothing. Theme and Component never store raw
 
 - *"Change the brand color / a primitive"* → edit `global/color/color.json` [or the relevant `global/<token-type>`]. Every token that aliases it updates automatically.
 - *"Make the button bigger / retune a size"* → edit `component/button/button.json`; point the `size` / `spacing-gap` mode values at different `{global.size-unit.*}`.
+- *"Add a second brand"* → give the Global steps the theme aliases a brand mode [`global.color.brand.3` → `ocean: #0e7490`]; Theme and Component are not touched [see Modes].
 - *"Add a dark-mode value for X"* → in the theme token, set `$extensions.mode.dark`; keep `$value` mirroring the `light` value [see Modes].
 - *"Add a danger / semantic variant"* → add a theme token aliasing `{global.color.red.3}` [e.g. `theme.button.danger.surface`] — the variant's look is complete in Theme; Component holds no color tokens to repoint.
 - *"Add a new component [e.g. card]"* → copy `component/button/` to `component/card/`, rename the `button` key to `card`, repoint the structural aliases at `{global.*}` per size mode [e.g. `component.card.radius` from `{global.radius.*}`], and add `theme/card/` if it needs its own look [e.g. `theme.card.surface`].

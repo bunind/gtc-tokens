@@ -21,7 +21,24 @@ text = root / "theme/text/text.json"
 before = text.read_text()
 assert run("set", "theme.text.secondary", "#123456")[0] == 1 and text.read_text() == before, "raw value in theme must be refused"
 assert run("set", "theme.text.secondary", "{global.color.nope.1}")[0] == 1 and text.read_text() == before, "invalid write must be undone"
-assert run("set", "theme.text.secondary@ocean-dark", "{global.color.blue.4}")[0] == 1, "unknown mode must be refused"
+code, out = run("set", "theme.text.secondary@ocean-dark", "{global.color.blue.4}")
+assert code == 1 and "global.color.brand.3@ocean" in out, "a brand mode on theme must be refused, pointing at global"
+assert run("set", "global.color.brand.3@dark", "#000000")[0] == 1, "a theme mode on global must be refused"
+
+# brand = a mode of a global token; a theme token follows through its alias, per theme mode
+color = root / "global/color/color.json"
+before = color.read_text()
+code, out = run("set", "global.color.brand.3@ocean", "#0e7490")
+assert code == 0 and "#0e7490" in out, out
+sys.path.insert(0, str(root)); sys.dont_write_bytecode = True; import gtc
+idx = gtc.load()[1]
+base = idx["global.color.brand.3"][1]["$value"]
+assert base != "#0e7490" and gtc.modes(idx["global.color.brand.3"][1]) == {"ocean": "#0e7490"}, "default brand stays in $value"
+assert f"global.color.brand.3  {base} · ocean #0e7490" in (root / "TOKENS.md").read_text()
+user = next(p for p, (_, n) in idx.items() if p.startswith("theme.") and "global.color.brand.3" in gtc.refs(n))
+assert gtc.resolve(idx, user, "ocean") == "#0e7490", "theme token must follow the brand through its alias"
+assert run("set", "global.size-unit.12@ocean", "13px")[0] == 1, "a brand value on a factual key must be factual"
+color.write_text(before); run("map")
 
 code, out = run("set", "theme.text.secondary@dark", "{global.color.base.4}")
 assert code == 0 and "#a3a3a3" in out, out
