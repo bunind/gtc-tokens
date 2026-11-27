@@ -90,7 +90,12 @@ try {
     'node_modules/.pnpm/node_modules': 'node_modules',
   })
 
-  console.log(`check OK — ${Object.keys(tokens).length} fixture tokens, all eight assertions hold`)
+  const wired = fs.readFileSync(path.join(out, '_wired/components/ui/button.tsx'), 'utf8')
+  assert.match(wired, /h-\(--component-button-size\)/, 'button height not wired to component.button.size')
+  assert.match(wired, /data-component='button' data-size=\{new Map\(.*\['sm','small'\].*\)\.get\(size \?\? 'default'\)\}/, 'button lacks data-size')
+  assert.deepStrictEqual(size.$extensions.mode, { small: '{global.size-unit.32}', medium: '{global.size-unit.36}', large: '{global.size-unit.40}' }, 'button size per mode')
+
+  console.log(`check OK — ${Object.keys(tokens).length} fixture tokens, all nine assertions hold`)
 } finally {
   for (const t of tmps) fs.rmSync(t, { recursive: true, force: true })
 }

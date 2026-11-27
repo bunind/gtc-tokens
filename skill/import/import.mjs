@@ -202,6 +202,7 @@ function scanClasses() {
   const unreachable = []      // {file, line, expr, element}
   const compounds = []        // {file, line, element}
   const unknownSizes = []     // {key, element, file, line}
+  const cvas = new Map()
 
   const srcRoot = ONLY ? path.join(REPO, ONLY) : REPO
   if (ONLY && !fs.existsSync(srcRoot)) die(`--only path not found: ${srcRoot}`)
@@ -250,7 +251,7 @@ function scanClasses() {
 
     function collectFrom(node, attr) {
       if (!node) return
-      if (ts.isStringLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node)) return add(node.text, attr)
+      if (ts.isStringLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node)) return add(node.text, { ...attr, pos: node.getStart(sf), end: node.end })
       if (ts.isTemplateExpression(node)) {
         add(node.head.text, attr)
         for (const s of node.templateSpans) { add(s.literal.text, attr); collectFrom(s.expression, attr) }
@@ -291,8 +292,14 @@ function scanClasses() {
       collectFrom(call.arguments[0], attr)   // base classes
       const cfg = call.arguments[1]
       if (!cfg || !ts.isObjectLiteralExpression(cfg)) return
+      const cv = { element: attr.element, sizes: {}, dflt: undefined }
+      if (ts.isVariableDeclaration(call.parent) && ts.isIdentifier(call.parent.name)) cvas.set(call.parent.name.text, cv)
       for (const p of cfg.properties) {
         const key = propName(p)
+        if (key === 'defaultVariants' && p.initializer && ts.isObjectLiteralExpression(p.initializer)) {
+          const d = p.initializer.properties.find(q => propName(q) === 'size')
+          if (d && d.initializer && ts.isStringLiteral(d.initializer)) cv.dflt = d.initializer.text
+        }
         if (key === 'variants' && p.initializer && ts.isObjectLiteralExpression(p.initializer)) {
           for (const axisP of p.initializer.properties) {
             const axis = propName(axisP)
@@ -302,6 +309,7 @@ function scanClasses() {
               const a = { ...attr, line: line(valP) }
               if (axis === 'size') {
                 a.size = SIZE_KEYS[k] ?? null
+                if (a.size) cv.sizes[k] = a.size
                 a.rawSize = k
                 // `icon` is shadcn's square-button variant, not a size-scale mode — known, not unknown
                 if (!a.size && k !== 'icon') unknownSizes.push({ key: k, element: attr.element, file: rel, line: line(valP) })
@@ -342,7 +350,7 @@ function scanClasses() {
     }
     visit(sf)
   }
-  return { classes, unreachable, compounds, unknownSizes }
+  return { classes, unreachable, compounds, unknownSizes, cvas }
 }
 
 // =========================================================================
@@ -784,6 +792,9 @@ function build(inventory, compiled, resolver) {
 
   // 3 — class hits → component / theme tokens + global bindings
   const darkDims = []
+  const wire = []
+  const props = new Map()
+  for (const h of compiled.hits) if (h.mode === 'light' && !h.state) props.set(h.cls, (props.get(h.cls) || new Set()).add(h.prop))
   for (const hit of compiled.hits) {
     const attrs = inventory.classes.get(hit.cls) || []
     const sample = attrs[0] || { element: null }
@@ -870,12 +881,16 @@ function build(inventory, compiled, resolver) {
         report.bindings.push({ element: el, property: hit.prop, token: a, from: src })
         continue
       }
-      if (sample.rawSize && !sample.size) {   // off-scale size key (icon …) — bind, don't pollute medium
-        report.bindings.push({ element: el, property: hit.prop, token: a, sizeKey: sample.rawSize, from: src })
-        continue
+      for (const at of attrs.length ? attrs : [sample]) {
+        const e = at.element || 'shared', from = `${hit.cls}${at.file ? `, ${at.file}:${at.line}` : ''}`
+        if (at.rawSize && !at.size) {   // off-scale size key (icon …) — bind, don't pollute medium
+          report.bindings.push({ element: e, property: hit.prop, token: a, sizeKey: at.rawSize, from })
+          continue
+        }
+        const mode = at.size || 'medium', token = put(`component.${e}.${dimId}`, 'dimension', mode, a, from)
+        if (at.pos != null && !hit.state && !hit.cls.includes(':') && !/infinity/.test(String(r.value ?? hit.value)))
+          wire.push({ file: at.file, pos: at.pos, end: at.end, cls: hit.cls, token, mode, value: a, element: e })
       }
-      const sizeMode = sample.size || 'medium'
-      put(`component.${el}.${dimId}`, 'dimension', sizeMode, a, src)
       continue
     }
 
@@ -941,6 +956,10 @@ function build(inventory, compiled, resolver) {
     }
   }
 
+  const moved = Object.fromEntries(report.renamedDefault.map(r => [r.from, r.to]))
+  report.wire = wire.map(w => ({ ...w, token: moved[w.token] || w.token }))
+    .filter(w => props.get(w.cls).size === 1 && tokens.get(w.token)?.modes.get(w.mode) === w.value)
+
   // near-duplicate colors (§6.4 — the drift finding)
   const colors = [...tokens].filter(([p, t]) => p.startsWith('global.color.') && !p.includes('.opacity.') && typeof t.modes.get('light') === 'string' && t.modes.get('light').startsWith('#'))
   for (let i = 0; i < colors.length; i++) {
@@ -968,6 +987,62 @@ function build(inventory, compiled, resolver) {
     })
   }
   return { tokens, report }
+}
+function wireFiles(tokens, report, cvas) {
+  const sized = t => [...tokens.get(t).modes.keys()].some(m => m !== 'medium')
+  const edits = new Map(), bad = new Set()
+  const at = f => edits.get(f) || edits.set(f, []).get(f)
+  const srcRoot = ONLY ? path.join(REPO, ONLY) : REPO
+  for (const file of walkFiles(srcRoot, ['.tsx', '.jsx', '.ts', '.js', '.mjs'])) {
+    const text = fs.readFileSync(file, 'utf8')
+    if (![...cvas.keys()].some(n => text.includes(n + '('))) continue
+    const sf = ts.createSourceFile(file, text, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX)
+    const rel = path.relative(REPO, file)
+    const visit = node => {
+      const cv = ts.isCallExpression(node) && ts.isIdentifier(node.expression) && cvas.get(node.expression.text)
+      if (cv && Object.keys(cv.sizes).length) {
+        const arg = node.arguments[0]
+        const sp = arg && ts.isObjectLiteralExpression(arg) && arg.properties.find(p => p.name && p.name.getText(sf) === 'size')
+        let jsx = node.parent
+        while (jsx && !ts.isJsxAttribute(jsx)) jsx = jsx.parent
+        const el = jsx && jsx.parent.parent
+        if (sp && (!el || el.attributes.properties.some(a => ts.isJsxAttribute(a) && /^data-(size|component)$/.test(a.name.getText(sf))))) bad.add(cv.element)
+        else if (sp) {
+          const expr = ts.isShorthandPropertyAssignment(sp) ? sp.name.text : sp.initializer.getText(sf)
+          const lit = !ts.isShorthandPropertyAssignment(sp) && ts.isStringLiteral(sp.initializer) && sp.initializer.text
+          const value = lit !== false ? (cv.sizes[lit] && `'${cv.sizes[lit]}'`)
+            : `{new Map(${JSON.stringify(Object.entries(cv.sizes)).replaceAll('"', "'")}).get(${expr} ?? '${cv.dflt ?? ''}')}`
+          if (value) at(rel).push({ pos: el.tagName.end, end: el.tagName.end, to: ` data-component='${cv.element}' data-size=${value}` })
+        }
+      }
+      ts.forEachChild(node, visit)
+    }
+    visit(sf)
+  }
+  const done = []
+  for (const w of report.wire) {
+    const m = /^([a-z]+(?:-[a-z]+)*)-([^-]+)$/.exec(w.cls)
+    if (!m || (sized(w.token) && bad.has(w.element))) continue
+    const hint = /^(text|border(-[xytrblse])?|outline|ring|decoration|stroke)$/.test(m[1]) ? 'length:' : ''
+    const to = `${m[1]}-(${hint}--${w.token.replaceAll('.', '-')})`
+    at(w.file).push({ pos: w.pos, end: w.end, cls: w.cls, to })
+    done.push({ file: w.file, class: w.cls, to })
+  }
+  for (const [rel, es] of edits) {
+    let text = fs.readFileSync(path.join(REPO, rel), 'utf8')
+    const lits = new Map()
+    for (const e of es) if (e.cls) (lits.get(e.pos) || lits.set(e.pos, { end: e.end, map: {} }).get(e.pos)).map[e.cls] = e.to
+    const ops = [...es.filter(e => !e.cls), ...[...lits].map(([pos, { end, map }]) => {
+      const raw = text.slice(pos, end)
+      return { pos, end, to: raw[0] + raw.slice(1, -1).split(/(\s+)/).map(c => map[c] || c).join('') + raw.at(-1) }
+    })].sort((a, b) => b.pos - a.pos)
+    for (const o of ops) text = text.slice(0, o.pos) + o.to + text.slice(o.end)
+    fs.mkdirSync(path.dirname(path.join(OUT, '_wired', rel)), { recursive: true })
+    fs.writeFileSync(path.join(OUT, '_wired', rel), text)
+  }
+  report.wire = done
+  report.wireSkipped = [...bad]
+  return edits.size
 }
 function bridgeCovers(r, compiled) {
   const n = r.varName || (r.colorMix && r.colorMix.inner.varName)
@@ -1053,7 +1128,6 @@ function emit(tokens, report) {
     }
     node[leaf] = entry
   }
-  fs.rmSync(OUT, { recursive: true, force: true })
   for (const [rel, obj] of files) {
     const f = path.join(OUT, rel)
     fs.mkdirSync(path.dirname(f), { recursive: true })
@@ -1076,6 +1150,8 @@ const compiled = walkCss(css, new Set(candidates))
 const SHADCN = ['background', 'primary', 'color-background', 'color-primary'].some(v => compiled.vars.light.has(v))
 const resolver = makeResolver(compiled.vars)
 const { tokens, report } = build(inventory, compiled, resolver)
+fs.rmSync(OUT, { recursive: true, force: true })
+const nWired = wireFiles(tokens, report, inventory.cvas)
 const nFiles = emit(tokens, report)
 // shadcn: the app keeps reading its cssVars; _bridge.css points them at the GTC tokens (tokens-sync css var names).
 if (SHADCN) fs.writeFileSync(path.join(OUT, '_bridge.css'), `:root, .dark {\n${Object.entries(SHADCN_BRIDGE).filter(([, t]) => tokens.has(t))
@@ -1088,6 +1164,7 @@ const counts = {
   unnamedRole: report.unnamedRole.length, unmappable: report.unmappable.length,
   bindings: report.bindings.length, conflicts: report.conflicts.length,
   compoundVariants: report.compoundVariants.length, shadcn: SHADCN,
+  wiredFiles: nWired, wiredClasses: report.wire.length,
 }
 if (JSON_ONLY) console.log(JSON.stringify(counts))
 else {
@@ -1097,4 +1174,5 @@ else {
   for (const k of ['unreachable', 'offScale', 'rawLiteral', 'nearDuplicate', 'unnamedRole', 'unmappable'])
     console.log(`  ${k}: ${counts[k]}`)
   console.log(`  bindings: ${counts.bindings}, conflicts: ${counts.conflicts}, compoundVariants: ${counts.compoundVariants}`)
+  console.log(`wired: ${nWired} files, ${report.wire.length} classes under ${path.join(OUT, '_wired')}`)
 }

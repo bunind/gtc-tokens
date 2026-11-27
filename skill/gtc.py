@@ -23,9 +23,9 @@ BRAND = re.compile(r"^[a-z][a-z0-9-]*$")
 THEME_MODES = {"light", "dark", "high-contrast"}
 SIZE_MODES = {"2xsmall", "xsmall", "small", "medium", "large", "xlarge", "2xlarge"}
 BLOCK = f"""<!-- gtc-tokens -->
-Design tokens (GTC) live in {REL}/. Read {REL}/TOKENS.md first: which token each CSS selector uses, then every token and value.
+Design tokens (GTC) live in {REL}/. Read {REL}/TOKENS.md first: which token each CSS selector uses, then every token and value, component tokens first.
 Change tokens only with `python3 {REL}/gtc.py set <path>[@mode] <value> ...` (validates, rebuilds, one call). Never hand-edit {REL}/**/*.json, validate.py or gtc.py.
-After any restyle (set or a CSS edit), run `python3 {REL}/gtc.py sweep`: it deletes inline style="" overrides that still hold the old value.
+Run `python3 {REL}/gtc.py sweep` only when `set` reports inline overrides that pin the old value, or after a CSS edit.
 <!-- /gtc-tokens -->"""
 
 
@@ -232,7 +232,7 @@ def render(idx):
     for p, (_, n) in idx.items():
         groups.setdefault(p.rsplit(".", 1)[0], []).append((p.rsplit(".", 1)[1], n))
     done = set()
-    for p, (_, n) in idx.items():
+    for p, (_, n) in sorted(idx.items(), key=lambda i: ("component", "theme", "global").index(i[0].split(".")[0])):
         parent = p.rsplit(".", 1)[0]
         kids = groups[parent]
         # a global ramp/scale of plain raw values collapses to one line
