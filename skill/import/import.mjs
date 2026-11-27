@@ -1077,6 +1077,9 @@ const SHADCN = ['background', 'primary', 'color-background', 'color-primary'].so
 const resolver = makeResolver(compiled.vars)
 const { tokens, report } = build(inventory, compiled, resolver)
 const nFiles = emit(tokens, report)
+// shadcn: the app keeps reading its cssVars; _bridge.css points them at the GTC tokens (tokens-sync css var names).
+if (SHADCN) fs.writeFileSync(path.join(OUT, '_bridge.css'), `:root, .dark {\n${Object.entries(SHADCN_BRIDGE).filter(([, t]) => tokens.has(t))
+  .map(([v, t]) => `  --${v}: var(--${t.replaceAll('.', '-')});`).join('\n')}\n}\n`)
 
 const counts = {
   tokens: tokens.size, files: nFiles, classes: inventory.classes.size, cssHits: compiled.hits.length,
