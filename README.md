@@ -29,7 +29,7 @@ ln -s "$PWD/gtc-tokens/skill" ~/.claude/skills/gtc-tokens
 
 `:import` extracts a GTC token set out of an existing **Tailwind v4** repo (shadcn included). It reads the component sources for their class inventory, compiles Tailwind against those classes, routes results into `global/`, `theme/` and `component/`, and emits a DTCG tree plus a report naming issues: unreachable classes, off-scale values, raw literals, near-duplicates. `:import` hands the tree to `:sync`, which owns the diff and the write.
 
-Install the repo's dependencies first: the extractor uses the repo's own `typescript`, `postcss` and `@tailwindcss/node`. If one is missing, or the repo is on TypeScript 7, the script stops and prints the `--deps` fix to run.
+Install the repo's dependencies first: the extractor uses the repo's own `typescript`, `postcss` and `@tailwindcss/node`. If one is missing, or the repo is on TypeScript 7, the script stops and prints the `--deps` fix.
 
 ## What's here
 
